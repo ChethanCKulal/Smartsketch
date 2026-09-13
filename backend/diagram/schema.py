@@ -103,6 +103,98 @@ def canonicalize_type(value, diagram_type="flowchart"):
     return "process"
 
 
+# When the user explicitly selects a diagram family, vision models still emit
+# generic shape names (rectangle, ellipse, diamond, process). These tables pull
+# such shapes into the chosen family's notation. Only applied on explicit
+# selection — auto-detected runs keep the model's finer-grained types.
+FAMILY_REMAP = {
+    "er": {
+        "rectangle": "entity", "roundedRectangle": "entity", "process": "entity",
+        "dfdProcess": "entity", "class": "entity", "interface": "entity",
+        "package": "entity", "externalEntity": "entity", "dataStore": "entity",
+        "database": "entity", "document": "entity", "predefinedProcess": "entity",
+        "parallelogram": "entity", "hexagon": "entity", "triangle": "entity",
+        "diamond": "relationship", "decision": "relationship",
+        "ellipse": "attribute", "usecase": "attribute", "terminator": "attribute",
+        "io": "attribute", "actor": "attribute", "dataFlow": "relationship",
+    },
+    "uml": {
+        "rectangle": "class", "roundedRectangle": "class", "process": "class",
+        "dfdProcess": "class", "entity": "class", "weakEntity": "class",
+        "externalEntity": "class", "dataStore": "class", "database": "class",
+        "document": "class", "predefinedProcess": "class", "parallelogram": "class",
+        "io": "class", "hexagon": "class", "triangle": "class",
+        "diamond": "class", "decision": "class",
+        "ellipse": "usecase", "attribute": "usecase", "terminator": "usecase",
+    },
+    "dfd": {
+        "process": "dfdProcess", "rectangle": "externalEntity",
+        "roundedRectangle": "dfdProcess", "entity": "externalEntity",
+        "class": "externalEntity", "interface": "externalEntity",
+        "package": "externalEntity", "weakEntity": "externalEntity",
+        "database": "dataStore", "document": "externalEntity",
+        "predefinedProcess": "dfdProcess", "parallelogram": "externalEntity",
+        "io": "externalEntity", "hexagon": "externalEntity", "triangle": "externalEntity",
+        "diamond": "dfdProcess", "decision": "dfdProcess",
+        "ellipse": "dfdProcess", "usecase": "dfdProcess", "terminator": "dfdProcess",
+        "attribute": "dfdProcess", "actor": "externalEntity",
+    },
+    "flowchart": {
+        "entity": "process", "class": "process", "interface": "process",
+        "package": "process", "dfdProcess": "process", "externalEntity": "process",
+        "dataStore": "database", "weakEntity": "process", "hexagon": "process",
+        "triangle": "process", "parallelogram": "io", "actor": "process",
+        "ellipse": "terminator", "usecase": "terminator", "attribute": "io",
+        "relationship": "decision", "diamond": "decision", "dataFlow": "io",
+    },
+}
+
+# The complete shape vocabulary of each diagram family. Nothing outside this
+# set may appear on the canvas while that family is active.
+FAMILY_NODE_TYPES = {
+    "flowchart": {"process", "decision", "terminator", "io", "document", "database", "predefinedProcess", "text"},
+    "er": {"entity", "attribute", "relationship", "weakEntity", "text"},
+    "uml": {"class", "interface", "package", "actor", "usecase", "text"},
+    "dfd": {"dfdProcess", "dataStore", "externalEntity", "dataFlow", "text"},
+}
+
+# Where a shape has no meaningful counterpart in the family, fall back to this.
+FAMILY_DEFAULTS = {
+    "flowchart": "process",
+    "er": "entity",
+    "uml": "class",
+    "dfd": "dfdProcess",
+}
+
+
+def remap_to_family(node_type, diagram_type):
+    """Pull generic shape types into the explicitly selected diagram family."""
+    mapping = FAMILY_REMAP.get(diagram_type)
+    if not mapping:
+        return node_type
+    return mapping.get(node_type, node_type)
+
+
+def enforce_family(node_type, diagram_type):
+    """Guarantee a node type belongs to the diagram family's shape vocabulary.
+
+    Allowed types pass through; everything else is remapped into the family and,
+    if even that fails, coerced to the family's default shape. "group" is a
+    canvas construct and is exempt.
+    """
+    if node_type == "group":
+        return node_type
+    family = FAMILY_NODE_TYPES.get(diagram_type)
+    if not family:
+        return node_type
+    if node_type in family:
+        return node_type
+    remapped = remap_to_family(node_type, diagram_type)
+    if remapped in family:
+        return remapped
+    return FAMILY_DEFAULTS.get(diagram_type, node_type)
+
+
 def validate_diagram(data):
     errors = []
     if not isinstance(data, dict):

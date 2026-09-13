@@ -1,7 +1,7 @@
 """Mirrors frontend command semantics for API-side dry runs."""
 
 from .rules import validate_command
-from diagram.schema import canonicalize_type, default_style
+from diagram.schema import canonicalize_type, default_style, enforce_family
 
 
 def execute_command(diagram, command):
@@ -20,7 +20,10 @@ def execute_command(diagram, command):
     if action == "ADD_NODE":
         node = {
             "id": payload.get("id") or f"node_{len(nodes) + 1}",
-            "type": canonicalize_type(payload.get("type")),
+            "type": enforce_family(
+                canonicalize_type(payload.get("type")),
+                diagram.get("diagram_type", "flowchart"),
+            ),
             "label": payload.get("label") or "Node",
             "position": payload.get("position") or {"x": 120 + 20 * len(nodes), "y": 120},
             "size": payload.get("size") or {"width": 160, "height": 72},

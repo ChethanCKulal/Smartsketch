@@ -1,4 +1,6 @@
-from .schema import canonicalize_type, default_style, empty_diagram
+from .schema import canonicalize_type, default_style, empty_diagram, enforce_family
+
+EXPLICIT_TYPES = {"flowchart", "uml", "er", "dfd"}
 
 
 def _bbox_to_position(bbox):
@@ -23,13 +25,19 @@ def normalize_source_payload(payload, source_name, requested_type=None):
             "edges": [],
         }
 
-    diagram_type = str(payload.get("diagram_type") or requested_type or "unknown").lower()
+    requested = str(requested_type or "auto").strip().lower()
+    explicit = requested in EXPLICIT_TYPES
+    diagram_type = str(payload.get("diagram_type") or requested or "unknown").lower()
     if diagram_type in {"class", "uml_class", "class_diagram"}:
         diagram_type = "uml"
     if diagram_type in {"entity_relationship", "erd"}:
         diagram_type = "er"
     if diagram_type in {"data_flow", "data-flow"}:
         diagram_type = "dfd"
+    if explicit:
+        # The user's selection is authoritative — a model that misreads the
+        # family must not override it (e.g. ER misreported as flowchart).
+        diagram_type = requested
 
     nodes = []
     for index, raw in enumerate(payload.get("nodes") or []):
@@ -49,6 +57,8 @@ def normalize_source_payload(payload, source_name, requested_type=None):
             }
         label = str(raw.get("label") or raw.get("text") or raw.get("name") or f"Node {index + 1}")
         node_type = canonicalize_type(raw.get("type") or raw.get("shape"), diagram_type)
+        if explicit:
+            node_type = enforce_family(node_type, requested)
         confidence = raw.get("confidence")
         try:
             confidence = float(confidence) if confidence is not None else 0.5
@@ -122,6 +132,10 @@ def normalize_source_payload(payload, source_name, requested_type=None):
 
 def to_canonical_diagram(normalized):
     diagram = empty_diagram(normalized.get("diagram_type") or "flowchart")
+    # Final safety net: no shape outside the diagram family's vocabulary may
+    # reach the canvas (e.g. a model claiming "er" while emitting rectangles).
+    for node in normalized.get("nodes") or []:
+        node["type"] = enforce_family(node["type"], diagram["diagram_type"])
     diagram["nodes"] = []
     for node in normalized.get("nodes") or []:
         diagram["nodes"].append(

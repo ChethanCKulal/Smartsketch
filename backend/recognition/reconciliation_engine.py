@@ -166,11 +166,13 @@ def reconcile(source_results, strategy=None):
 
 
 def _merge_nodes(a, b, strategy, disagreements):
+    # Synthetic "L"/"R" ids: source ids may collide across services (both may emit "n1"),
+    # so the winner must be identified by side, never by the original id.
     chosen = strategy.choose_disagreement(
-        {"confidence": a["confidence"], "sources": a["sources"], "label": a["label"], "id": a["id"], "item": a},
-        {"confidence": b["confidence"], "sources": b["sources"], "label": b["label"], "id": b["id"], "item": b},
+        {"confidence": a["confidence"], "sources": a["sources"], "label": a["label"], "id": "L", "item": a},
+        {"confidence": b["confidence"], "sources": b["sources"], "label": b["label"], "id": "R", "item": b},
     )
-    primary = a if chosen["id"] == a["id"] else b
+    primary = a if chosen["id"] == "L" else b
     secondary = b if primary is a else a
     label_agree = _sim(a["label"], b["label"]) >= 0.72
     type_agree = a["type"] == b["type"]
@@ -206,12 +208,6 @@ def _merge_nodes(a, b, strategy, disagreements):
     return merged
 
 
-def _edge_key(edge, id_map):
-    src = id_map.get(edge["source"], edge["source"])
-    dst = id_map.get(edge["target"], edge["target"])
-    return tuple(sorted((src, dst))) + (edge.get("label", "").lower(),)
-
-
 def _merge_edges(left, right, map_l, map_r, strategy, disagreements):
     used_r = set()
     merged = []
@@ -237,10 +233,10 @@ def _merge_edges(left, right, map_l, map_r, strategy, disagreements):
             if (edge_a.get("label") or "") != (edge_b.get("label") or "") or edge_a.get("arrow") != edge_b.get("arrow"):
                 disagreements.append({"kind": "edge", "left": edge_a, "right": edge_b})
                 winner = strategy.choose_disagreement(
-                    {"confidence": edge_a["confidence"], "sources": edge_a["sources"], "label": edge_a.get("label", ""), "id": edge_a["id"]},
-                    {"confidence": edge_b["confidence"], "sources": edge_b["sources"], "label": edge_b.get("label", ""), "id": edge_b["id"]},
+                    {"confidence": edge_a["confidence"], "sources": edge_a["sources"], "label": edge_a.get("label", ""), "id": "L"},
+                    {"confidence": edge_b["confidence"], "sources": edge_b["sources"], "label": edge_b.get("label", ""), "id": "R"},
                 )
-                if winner["id"] == edge_b["id"]:
+                if winner["id"] == "R":
                     clone["label"] = edge_b.get("label", "")
                     clone["arrow"] = edge_b.get("arrow", "forward")
                     clone["source"] = map_r.get(edge_b["source"], clone["source"])

@@ -3,6 +3,7 @@
 ALLOWED_ACTIONS = {
     "ADD_NODE",
     "DELETE_NODE",
+    "DELETE_BY_TYPE",
     "MOVE_NODE",
     "RESIZE_NODE",
     "EDIT_TEXT",

@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from routes.health import health_bp
 from routes.recognize import recognize_bp
 from routes.chat import chat_bp
+from routes.export import export_bp
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv()
@@ -17,6 +18,7 @@ def create_app():
     app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(recognize_bp, url_prefix="/api")
     app.register_blueprint(chat_bp, url_prefix="/api")
+    app.register_blueprint(export_bp, url_prefix="/api")
     return app
 
 

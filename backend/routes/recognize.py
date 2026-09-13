@@ -40,6 +40,8 @@ def recognize():
                 {
                     "error": reconciled.get("error") or "Recognition failed.",
                     "reconciliation": {
+                        "requested_type": hint,
+                        "detected_type": reconciled.get("diagram_type"),
                         "warnings": reconciled.get("warnings"),
                         "sources_used": reconciled.get("sources_used"),
                         "disagreements": reconciled.get("disagreements"),
@@ -67,6 +69,8 @@ def recognize():
     message = "Diagram recognized and reconciled."
     if reconciled.get("partial"):
         message = "One recognition source failed; continuing with the successful source."
+    if hint != "auto":
+        message += f" Requested type '{hint}' was enforced."
 
     return jsonify(
         {
@@ -75,6 +79,8 @@ def recognize():
             "partial": bool(reconciled.get("partial")),
             "image": {"width": size[0], "height": size[1], "ocr": ocr_meta},
             "reconciliation": {
+                "requested_type": hint,
+                "detected_type": reconciled.get("diagram_type"),
                 "sources_used": reconciled.get("sources_used"),
                 "warnings": reconciled.get("warnings"),
                 "disagreements": reconciled.get("disagreements"),
