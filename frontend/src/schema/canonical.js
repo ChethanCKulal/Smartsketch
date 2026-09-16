@@ -41,6 +41,73 @@ export const NODE_TYPES = [
 
 export const DEFAULT_SIZE = { width: 160, height: 72 };
 
+/**
+ * The complete shape vocabulary of each diagram family. Nothing outside this
+ * set may appear on the canvas while that family is active — an ER diagram
+ * never shows flowchart shapes and vice versa.
+ */
+export const FAMILY_NODE_TYPES = {
+  flowchart: ["process", "decision", "terminator", "io", "document", "database", "predefinedProcess", "text"],
+  er: ["entity", "attribute", "relationship", "weakEntity", "text"],
+  uml: ["class", "interface", "package", "actor", "usecase", "text"],
+  dfd: ["dfdProcess", "dataStore", "externalEntity", "dataFlow", "text"],
+};
+
+/** Where a shape has no meaningful counterpart in the family, use this. */
+export const FAMILY_DEFAULTS = {
+  flowchart: "process",
+  er: "entity",
+  uml: "class",
+  dfd: "dfdProcess",
+};
+
+/** Closest cross-family counterparts, mirroring the backend FAMILY_REMAP. */
+const CROSS_FAMILY = {
+  // Generic shapes a vision model may emit for any family
+  rectangle: { flowchart: "process", er: "entity", uml: "class", dfd: "externalEntity" },
+  roundedRectangle: { flowchart: "process", er: "entity", uml: "class", dfd: "dfdProcess" },
+  ellipse: { flowchart: "terminator", er: "attribute", uml: "usecase", dfd: "dfdProcess" },
+  diamond: { flowchart: "decision", er: "relationship", uml: "class", dfd: "dfdProcess" },
+  triangle: { flowchart: "process", er: "entity", uml: "class", dfd: "externalEntity" },
+  hexagon: { flowchart: "process", er: "entity", uml: "class", dfd: "externalEntity" },
+  parallelogram: { flowchart: "io", er: "entity", uml: "class", dfd: "externalEntity" },
+  // flowchart → others
+  process: { er: "entity", uml: "class", dfd: "dfdProcess" },
+  decision: { er: "relationship", uml: "class", dfd: "dfdProcess" },
+  terminator: { er: "attribute", uml: "usecase", dfd: "dfdProcess" },
+  io: { er: "attribute", uml: "class", dfd: "externalEntity" },
+  document: { er: "entity", uml: "class", dfd: "externalEntity" },
+  database: { er: "entity", uml: "class", dfd: "dataStore" },
+  predefinedProcess: { er: "entity", uml: "class", dfd: "dfdProcess" },
+  // er → others
+  entity: { flowchart: "process", uml: "class", dfd: "externalEntity" },
+  attribute: { flowchart: "io", uml: "usecase", dfd: "dfdProcess" },
+  relationship: { flowchart: "decision", uml: "class", dfd: "dfdProcess" },
+  weakEntity: { flowchart: "process", uml: "class", dfd: "externalEntity" },
+  // uml → others
+  class: { flowchart: "process", er: "entity", dfd: "externalEntity" },
+  interface: { flowchart: "process", er: "entity", dfd: "externalEntity" },
+  package: { flowchart: "process", er: "entity", dfd: "externalEntity" },
+  actor: { flowchart: "terminator", er: "attribute", dfd: "externalEntity" },
+  usecase: { flowchart: "terminator", er: "attribute", dfd: "dfdProcess" },
+  // dfd → others
+  dfdProcess: { flowchart: "process", er: "entity", uml: "class" },
+  dataStore: { flowchart: "database", er: "entity", uml: "class" },
+  externalEntity: { flowchart: "process", er: "entity", uml: "class" },
+  dataFlow: { flowchart: "io", er: "relationship", uml: "class" },
+};
+
+/** Map a foreign node type into a diagram family's vocabulary. */
+export function enforceFamily(nodeType, diagramType) {
+  if (nodeType === "group") return nodeType;
+  const family = FAMILY_NODE_TYPES[diagramType];
+  if (!family) return nodeType;
+  if (family.includes(nodeType)) return nodeType;
+  const counterpart = CROSS_FAMILY[nodeType]?.[diagramType];
+  if (counterpart && family.includes(counterpart)) return counterpart;
+  return FAMILY_DEFAULTS[diagramType] || nodeType;
+}
+
 export function emptyDiagram(diagramType = "flowchart") {
   return {
     version: 1,
@@ -90,6 +157,9 @@ export function createCanonicalNode(partial = {}) {
     style,
     attributes: Array.isArray(partial.attributes) ? partial.attributes : [],
     methods: Array.isArray(partial.methods) ? partial.methods : [],
+    // false once the user resizes a node by hand: their size then wins over
+    // fitting the box to the text it holds.
+    autoSize: partial.autoSize !== false,
     locked: Boolean(partial.locked),
     parentId: partial.parentId || null,
     confidence: typeof partial.confidence === "number" ? partial.confidence : null,

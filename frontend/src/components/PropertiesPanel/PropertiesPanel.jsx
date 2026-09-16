@@ -1,4 +1,4 @@
-import { DIAGRAM_TYPES, NODE_TYPES } from "../../schema/canonical";
+import { DIAGRAM_TYPES, FAMILY_NODE_TYPES, NODE_TYPES } from "../../schema/canonical";
 import { TYPE_LABELS } from "../../canvas/shapeCatalog";
 import { ACTIONS } from "../../canvas/commands/types";
 import { useDiagramStore } from "../../state/diagramStore";
@@ -79,8 +79,24 @@ export default function PropertiesPanel() {
   const patch = (partial) =>
     dispatch({ action: ACTIONS.UPDATE_NODE, payload: { id: node.id, patch: partial } });
 
+  const isClass = node.type === "class" || node.type === "interface";
+
   return (
     <form className="prop-form" onSubmit={(e) => e.preventDefault()}>
+      {(node.confidence != null || node.sources?.length) && (
+        <div className="props-badge">
+          {node.confidence != null && (
+            <span>
+              Recognition confidence: <strong>{Math.round(node.confidence * 100)}%</strong>
+            </span>
+          )}
+          {node.sources?.length ? (
+            <span>
+              Sources: <strong>{node.sources.join(", ")}</strong>
+            </span>
+          ) : null}
+        </div>
+      )}
       <label>
         Text
         <input value={node.label} onChange={(e) => patch({ label: e.target.value })} />
@@ -88,7 +104,7 @@ export default function PropertiesPanel() {
       <label>
         Shape type
         <select value={node.type} onChange={(e) => patch({ type: e.target.value })}>
-          {NODE_TYPES.map((t) => (
+          {(FAMILY_NODE_TYPES[diagram.diagram_type] || NODE_TYPES).map((t) => (
             <option key={t} value={t}>
               {TYPE_LABELS[t] || t}
             </option>
@@ -143,8 +159,15 @@ export default function PropertiesPanel() {
       </div>
       <div className="prop-row">
         <label>
-          Color
-          <input type="color" value={toHex(node.style.color)} onChange={(e) => patch({ style: { color: e.target.value } })} />
+          Border width
+          <input
+            type="number"
+            min="0"
+            max="12"
+            step="0.5"
+            value={node.style.borderWidth ?? 1.5}
+            onChange={(e) => patch({ style: { borderWidth: Number(e.target.value) } })}
+          />
         </label>
         <label>
           Opacity
@@ -155,6 +178,20 @@ export default function PropertiesPanel() {
             step="0.05"
             value={node.style.opacity}
             onChange={(e) => patch({ style: { opacity: Number(e.target.value) } })}
+          />
+        </label>
+      </div>
+      <div className="prop-row">
+        <label>
+          Color
+          <input type="color" value={toHex(node.style.color)} onChange={(e) => patch({ style: { color: e.target.value } })} />
+        </label>
+        <label>
+          Font size
+          <input
+            type="number"
+            value={node.style.fontSize}
+            onChange={(e) => patch({ style: { fontSize: Number(e.target.value) } })}
           />
         </label>
       </div>
@@ -170,18 +207,18 @@ export default function PropertiesPanel() {
       </label>
       <div className="prop-row">
         <label>
-          Font size
-          <input
-            type="number"
-            value={node.style.fontSize}
-            onChange={(e) => patch({ style: { fontSize: Number(e.target.value) } })}
-          />
-        </label>
-        <label>
           Font style
           <select value={node.style.fontStyle} onChange={(e) => patch({ style: { fontStyle: e.target.value } })}>
             <option value="normal">Normal</option>
             <option value="italic">Italic</option>
+          </select>
+        </label>
+        <label>
+          Weight
+          <select value={node.style.fontWeight || "500"} onChange={(e) => patch({ style: { fontWeight: e.target.value } })}>
+            <option value="400">Regular</option>
+            <option value="500">Medium</option>
+            <option value="700">Bold</option>
           </select>
         </label>
       </div>
@@ -193,6 +230,28 @@ export default function PropertiesPanel() {
           <option value="right">Right</option>
         </select>
       </label>
+      {/* ER entities are a name-only rectangle, so members are edited as nodes. */}
+      {(isClass ||
+        (!["entity", "weakEntity"].includes(node.type) && (node.attributes?.length || node.methods?.length))) && (
+        <label>
+          Attributes (one per line)
+          <textarea
+            rows={isClass ? 3 : 2}
+            value={(node.attributes || []).join("\n")}
+            onChange={(e) => patch({ attributes: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+        </label>
+      )}
+      {isClass && (
+        <label>
+          Methods (one per line)
+          <textarea
+            rows={3}
+            value={(node.methods || []).join("\n")}
+            onChange={(e) => patch({ methods: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+        </label>
+      )}
       <label>
         Diagram type
         <select

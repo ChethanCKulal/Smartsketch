@@ -19,6 +19,7 @@ export const useDiagramStore = create((set, get) => ({
   statusKind: "ok",
   chatbotLog: [],
   lastCommand: null,
+  editingNodeId: null,
 
   dispatch(command, { record = true } = {}) {
     const { diagram, history } = get();
@@ -68,6 +69,10 @@ export const useDiagramStore = create((set, get) => ({
 
   setZoom(zoom) {
     set({ zoom });
+  },
+
+  setEditingNodeId(editingNodeId) {
+    set({ editingNodeId });
   },
 
   setSnap(snapToGrid) {

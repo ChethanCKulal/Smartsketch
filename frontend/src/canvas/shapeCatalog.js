@@ -1,6 +1,7 @@
 export const SHAPE_LIBRARY = [
   {
     category: "General",
+    family: null, // universal shapes (filtered by the active family's vocabulary)
     items: [
       { type: "rectangle", label: "Rectangle" },
       { type: "roundedRectangle", label: "Rounded Rectangle" },
@@ -14,6 +15,7 @@ export const SHAPE_LIBRARY = [
   },
   {
     category: "Flowchart",
+    family: "flowchart",
     items: [
       { type: "process", label: "Process" },
       { type: "decision", label: "Decision" },
@@ -26,6 +28,7 @@ export const SHAPE_LIBRARY = [
   },
   {
     category: "UML",
+    family: "uml",
     items: [
       { type: "class", label: "Class" },
       { type: "interface", label: "Interface" },
@@ -36,6 +39,7 @@ export const SHAPE_LIBRARY = [
   },
   {
     category: "ER",
+    family: "er",
     items: [
       { type: "entity", label: "Entity" },
       { type: "attribute", label: "Attribute" },
@@ -45,6 +49,7 @@ export const SHAPE_LIBRARY = [
   },
   {
     category: "DFD",
+    family: "dfd",
     items: [
       { type: "dfdProcess", label: "Process" },
       { type: "dataStore", label: "Data Store" },

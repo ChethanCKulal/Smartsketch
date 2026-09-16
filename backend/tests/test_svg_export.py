@@ -41,7 +41,8 @@ def test_svg_contains_nodes_and_labels():
     svg = diagram_to_svg(DIAGRAM)
     assert svg.startswith("<svg")
     assert "Student" in svg and "Course" in svg
-    assert "StudentID, Name" in svg
+    # ER entities show only the name; attributes are separate oval nodes.
+    assert "Student" in svg
     assert "Enrolls" in svg
 
 

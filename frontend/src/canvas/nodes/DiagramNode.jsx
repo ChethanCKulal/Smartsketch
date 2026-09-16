@@ -1,4 +1,5 @@
 import { Handle, NodeResizer, Position } from "@xyflow/react";
+import { useDiagramStore } from "../../state/diagramStore";
 
 const CLIP = {
   hexagon: "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)",
@@ -43,6 +44,9 @@ function shellStyle(node) {
   if (type === "weakEntity") {
     return { ...base, outline: `2px solid ${s.border}`, outlineOffset: 3 };
   }
+  if (type === "entity") {
+    return { ...base, borderRadius: 2, padding: 0 };
+  }
   if (type === "dataStore") {
     return { ...base, borderLeft: `4px solid ${s.border}`, borderRight: 0, borderRadius: 0 };
   }
@@ -58,13 +62,24 @@ function shellStyle(node) {
   return { ...base, borderRadius: 4 };
 }
 
-export default function DiagramNode({ data, selected }) {
+export default function DiagramNode({ data, selected, id }) {
   const node = data.canonical;
   const style = shellStyle(node);
   const isClass = node.type === "class" || node.type === "interface";
+  const isErEntity = node.type === "entity" || node.type === "weakEntity";
+
+  const startEdit = (e) => {
+    e.stopPropagation();
+    useDiagramStore.getState().setEditingNodeId(id);
+  };
 
   return (
-    <div className={`diagram-node ${node.locked ? "locked" : ""}`} style={style}>
+    <div
+      className={`diagram-node ${node.locked ? "locked" : ""}`}
+      style={style}
+      onDoubleClick={startEdit}
+      title="Double-click to edit text"
+    >
       <NodeResizer
         isVisible={selected && !node.locked}
         minWidth={40}
@@ -81,13 +96,23 @@ export default function DiagramNode({ data, selected }) {
           <div className="label">{node.label}</div>
         </div>
       ) : isClass ? (
+        // UML classes always keep their three compartments: name, attributes, methods.
         <div className="class-body">
-          <div className="title">{node.type === "interface" ? `«interface» ${node.label}` : node.label}</div>
-          <div className="section">{(node.attributes || []).join("\n") || " "}</div>
-          <div className="section" style={{ borderTop: "1px solid currentColor" }}>
-            {(node.methods || []).join("\n") || " "}
+          <div className="class-title">{node.type === "interface" ? `\u00ABinterface\u00BB ${node.label}` : node.label}</div>
+          <div className="class-section class-attrs">
+            {(node.attributes || []).length > 0
+              ? node.attributes.map((a, i) => <div key={i} className="class-member">{a}</div>)
+              : <div className="class-member class-empty">&nbsp;</div>}
+          </div>
+          <div className="class-section class-methods">
+            {(node.methods || []).length > 0
+              ? node.methods.map((m, i) => <div key={i} className="class-member">{m}</div>)
+              : <div className="class-member class-empty">&nbsp;</div>}
           </div>
         </div>
+      ) : isErEntity ? (
+        // ER entities are a single plain rectangle holding only the name.
+        <div className="er-entity-name">{node.label}</div>
       ) : (
         <div className="label">
           {node.label}

@@ -9,10 +9,11 @@ STRICT_PROMPT = """Extract a software engineering diagram from this image.
 Return STRICT JSON only, no markdown, matching:
 {
   "diagram_type": "flowchart|uml|er|dfd",
-  "nodes": [{"id":"n1","type":"entity|process|class|decision|terminator|dataStore|externalEntity|attribute|relationship","label":"...","attributes":[],"bbox":[x1,y1,x2,y2],"confidence":0.0}],
+  "nodes": [{"id":"n1","type":"entity|process|class|decision|terminator|dataStore|externalEntity|attribute|relationship","label":"...","attributes":[],"methods":[],"bbox":[x1,y1,x2,y2],"confidence":0.0}],
   "edges": [{"id":"e1","source":"n1","target":"n2","label":"","arrow":"forward","confidence":0.0}]
 }
-Identify diagram type, nodes, text, relationships, connectors, bounding boxes, and confidence.
+Identify diagram type, nodes, text, attributes, methods, relationships, connectors, bounding boxes, and confidence.
+A class/interface label is ONLY the class name — its members go in "attributes" and "methods", never in the label.
 Use "rectangle" only when a shape matches no domain notation.
 DIAGRAM_TYPE_HINT
 """

@@ -27,6 +27,8 @@ export default function Canvas() {
   const snapToGrid = useDiagramStore((s) => s.snapToGrid);
   const gridSize = useDiagramStore((s) => s.gridSize);
   const setZoom = useDiagramStore((s) => s.setZoom);
+  const editingId = useDiagramStore((s) => s.editingNodeId);
+  const setEditingId = useDiagramStore((s) => s.setEditingNodeId);
   const { screenToFlowPosition, fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
   const mapped = useMemo(() => diagramToFlow(diagram), [diagram]);
   const [nodes, setNodes] = useState(mapped.nodes);
@@ -83,11 +85,19 @@ export default function Canvas() {
     setEdges((current) => applyEdgeChanges(changes, current));
   }, []);
 
+  const onNodeDragStart = useCallback(() => {
+    setEditingId(null);
+  }, []);
+
   const onNodeDragStop = useCallback(
     (_e, _node, dragged) => {
+      const moved = dragged.filter(
+        (n) => !n.data?.canonical?.locked
+      );
+      if (!moved.length) return;
       dispatch({
         action: ACTIONS.MOVE_NODES,
-        payload: { moves: dragged.map((n) => ({ id: n.id, position: n.position })) },
+        payload: { moves: moved.map((n) => ({ id: n.id, position: n.position })) },
       });
     },
     [dispatch]
@@ -105,13 +115,33 @@ export default function Canvas() {
 
   const onReconnect = useCallback(
     (oldEdge, newConnection) => {
-      dispatch({ action: ACTIONS.DISCONNECT, payload: { id: oldEdge.id } });
       dispatch({
-        action: ACTIONS.CONNECT,
-        payload: { sourceId: newConnection.source, targetId: newConnection.target },
+        action: ACTIONS.RECONNECT,
+        payload: {
+          id: oldEdge.id,
+          sourceId: newConnection.source,
+          targetId: newConnection.target,
+          sourceHandle: newConnection.sourceHandle,
+          targetHandle: newConnection.targetHandle,
+        },
       });
     },
     [dispatch]
+  );
+
+  // Persist an inline label edit through the shared command layer so it joins
+  // the same undo history as chatbot renames.
+  const commitEdit = useCallback(
+    (nodeId, label) => {
+      setEditingId(null);
+      if (!nodeId) return;
+      const canonical = useDiagramStore
+        .getState()
+        .diagram.nodes.find((n) => n.id === nodeId);
+      if (!canonical || canonical.label === label) return;
+      dispatch({ action: ACTIONS.EDIT_TEXT, payload: { id: nodeId, label } });
+    },
+    [dispatch, setEditingId]
   );
 
   useEffect(() => {
@@ -142,6 +172,7 @@ export default function Canvas() {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onReconnect={onReconnect}
@@ -176,6 +207,15 @@ export default function Canvas() {
           </button>
           <button
             onClick={() => {
+              const { selectedIds } = useDiagramStore.getState();
+              dispatch({ action: ACTIONS.FIT_TEXT, payload: { ids: selectedIds } });
+              setMenu(null);
+            }}
+          >
+            Fit shapes to text
+          </button>
+          <button
+            onClick={() => {
               window.__scFit?.();
               setMenu(null);
             }}
@@ -184,6 +224,63 @@ export default function Canvas() {
           </button>
         </div>
       )}
+      {editingId && (
+        <InlineLabelEditor
+          editingId={editingId}
+          onDone={commitEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Floats an input over the selected node (double-click to edit).
+ * Lives outside React Flow so it never fights the node renderer for focus.
+ */
+function InlineLabelEditor({ editingId, onDone }) {
+  const diagram = useDiagramStore((s) => s.diagram);
+  const node = diagram.nodes.find((n) => n.id === editingId);
+  const [value, setValue] = useState(node?.label ?? "");
+  if (!node) return null;
+  return (
+    <div
+      className="inline-edit"
+      style={{
+        position: "fixed",
+        left: 0,
+        top: 0,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      ref={(el) => {
+        if (!el || el.dataset.live === "1") return;
+        el.dataset.live = "1";
+        // Track the node each frame so the editor sticks to it while zooming.
+        const tick = () => {
+          if (!document.body.contains(el)) return;
+          const dom = document.querySelector(`[data-id="${CSS.escape(editingId)}"]`);
+          if (dom) {
+            const r = dom.getBoundingClientRect();
+            el.style.left = `${r.left}px`;
+            el.style.top = `${r.top}px`;
+            el.style.width = `${r.width}px`;
+            el.style.height = `${r.height}px`;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }}
+    >
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => onDone(editingId, value.trim() || node.label)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onDone(editingId, value.trim() || node.label);
+          if (e.key === "Escape") onDone(null, "");
+        }}
+      />
     </div>
   );
 }

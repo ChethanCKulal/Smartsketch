@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { DIAGRAM_TYPES } from "../../schema/canonical";
 import { recognizeDiagram } from "../../services/api";
 
 const TYPES = ["image/png", "image/jpeg", "image/jpg"];
 const MAX = 8 * 1024 * 1024;
+
+const TYPE_CARDS = [
+  { id: "flowchart", label: "Flowchart", detail: "Process, decision, terminator…", glyph: "⇨" },
+  { id: "er", label: "ER Diagram", detail: "Entities, relationships, attributes", glyph: "▣" },
+  { id: "uml", label: "UML Class", detail: "Classes, interfaces, actors", glyph: "☰" },
+  { id: "dfd", label: "DFD", detail: "Processes, data stores, flows", glyph: "◉" },
+];
 
 export default function UploadModal({ open, onClose, onRecognized }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [rotation, setRotation] = useState(0);
   const [crop, setCrop] = useState(0);
-  const [diagramType, setDiagramType] = useState("auto");
+  const [diagramType, setDiagramType] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [report, setReport] = useState(null);
+  const [sourcesReport, setSourcesReport] = useState(null);
   const inputRef = useRef();
 
   useEffect(() => {
@@ -29,6 +36,7 @@ export default function UploadModal({ open, onClose, onRecognized }) {
   const pick = (f) => {
     setError("");
     setReport(null);
+    setSourcesReport(null);
     if (!f) return;
     if (!TYPES.includes(f.type) && !/\.(png|jpe?g)$/i.test(f.name)) {
       setError("Invalid image. Use PNG, JPG, or JPEG.");
@@ -67,17 +75,22 @@ export default function UploadModal({ open, onClose, onRecognized }) {
       setError("Upload an image first.");
       return;
     }
+    if (!diagramType) {
+      setError("Choose the diagram type before starting recognition.");
+      return;
+    }
     setBusy(true);
     setError("");
-    setProgress("Sending image to Gemini and Hugging Face…");
+    setProgress("Processing Image");
     try {
       const payload = await transformedFile();
       const result = await recognizeDiagram({
         file: payload,
         diagramType,
-        autoDetect: diagramType === "auto",
+        autoDetect: false,
       });
       setReport(result.reconciliation);
+      setSourcesReport(result.sources || null);
       setProgress("Recognition complete.");
       onRecognized(result);
     } catch (err) {
@@ -88,11 +101,14 @@ export default function UploadModal({ open, onClose, onRecognized }) {
     }
   };
 
+  const chosen = TYPE_CARDS.find((t) => t.id === diagramType);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Upload diagram photograph</h2>
         <p>Send a hand-drawn diagram to both vision services. Results are reconciled into editable canvas objects.</p>
+
         <div
           className="dropzone"
           onDragOver={(e) => e.preventDefault()}
@@ -111,6 +127,7 @@ export default function UploadModal({ open, onClose, onRecognized }) {
             onChange={(e) => pick(e.target.files[0])}
           />
         </div>
+
         {preview && (
           <div className="preview-wrap">
             <img src={preview} alt="Preview" style={{ transform: `rotate(${rotation}deg) scale(${1 - crop / 200})` }} />
@@ -126,17 +143,30 @@ export default function UploadModal({ open, onClose, onRecognized }) {
             <input type="range" min="0" max="40" value={crop} onChange={(e) => setCrop(Number(e.target.value))} />
           </label>
         </div>
-        <label>
-          Diagram type
-          <select value={diagramType} onChange={(e) => setDiagramType(e.target.value)} className="toolbar-select" style={{ width: "100%", marginTop: 6 }}>
-            <option value="auto">Automatic detection</option>
-            {DIAGRAM_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
+
+        <div className="type-picker">
+          <div className="type-picker-title">What kind of diagram is this?</div>
+          <div className="type-grid">
+            {TYPE_CARDS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`type-card ${diagramType === t.id ? "selected" : ""}`}
+                onClick={() => setDiagramType(t.id)}
+              >
+                <span className="type-glyph">{t.glyph}</span>
+                <span className="type-label">{t.label}</span>
+                <span className="type-detail">{t.detail}</span>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+          <div className="type-note">
+            {chosen
+              ? `Both models will be told to treat this as a ${chosen.label} — the diagram keeps that notation's shapes and wording.`
+              : "Pick the diagram type — recognition uses it to choose the right shapes and wording."}
+          </div>
+        </div>
+
         {busy && (
           <div style={{ marginTop: 12 }}>
             <div className="progress">
@@ -149,19 +179,28 @@ export default function UploadModal({ open, onClose, onRecognized }) {
         {report && (
           <div className="recon-card">
             <h3>Reconciliation</h3>
+            <div>Detected as: <strong>{report.detected_type || "—"}</strong> · Requested: <strong>{report.requested_type}</strong></div>
             <div>Sources used: {(report.sources_used || []).join(", ") || "none"}</div>
+            {sourcesReport && (
+              <div>
+                Gemini: {sourcesReport.gemini?.node_count ?? "–"} nodes / {sourcesReport.gemini?.edge_count ?? "–"} edges
+                {" · "}Hugging Face: {sourcesReport.huggingface?.node_count ?? "–"} nodes /{" "}
+                {sourcesReport.huggingface?.edge_count ?? "–"} edges
+              </div>
+            )}
             <div>Disagreements: {report.disagreements?.length || 0}</div>
             {report.warnings?.length ? <div>Warnings: {report.warnings.join(" ")}</div> : null}
           </div>
         )}
+
         <div className="modal-actions">
           <button className="btn-ghost" onClick={onClose}>
             Close
           </button>
-          <button className="btn-ghost" disabled={!file || busy} onClick={start}>
+          <button className="btn-ghost" disabled={!file || !diagramType || busy} onClick={start}>
             Retry / start recognition
           </button>
-          <button className="btn-primary" disabled={!file || busy} onClick={start}>
+          <button className="btn-primary" disabled={!file || !diagramType || busy} onClick={start}>
             Start recognition
           </button>
         </div>

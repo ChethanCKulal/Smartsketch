@@ -6,6 +6,31 @@ canonical JSON the canvas renders into a static SVG file.
 
 from diagram.schema import default_style
 
+# White-background export overrides for readability.
+_EXPORT_STYLE = {
+    "fill": "#f0f4f8",
+    "border": "#3a6b9f",
+    "borderWidth": 1.5,
+    "color": "#1a1a1a",
+    "font": "Segoe UI",
+    "fontSize": 13,
+    "fontStyle": "normal",
+    "fontWeight": "500",
+    "textAlign": "center",
+    "opacity": 1,
+    "lineStyle": "solid",
+    "arrow": "forward",
+}
+
+
+# ER-specific palette for attribute ovals, entity boxes, relationship diamonds.
+_ER_EXPORT = {
+    "attribute": {"fill": "#dce8f5", "border": "#4a7fb5", "color": "#1a1a1a"},
+    "entity": {"fill": "#c8ddf5", "border": "#2c6aa0", "color": "#0d1b2a"},
+    "relationship": {"fill": "#c5e6d0", "border": "#2a8a4a", "color": "#0d1b2a"},
+    "weakEntity": {"fill": "#d5c8f0", "border": "#6a4aae", "color": "#0d1b2a"},
+}
+
 
 def _esc(text):
     return (
@@ -43,7 +68,7 @@ def _edge_svg(edge, nodes, ox, oy):
     target = _find(nodes, edge.get("target"))
     if not source or not target:
         return ""
-    style = {**default_style(), **(edge.get("style") or {})}
+    style = {**_EXPORT_STYLE, **(edge.get("style") or {})}
 
     sx, sy = source["position"]["x"], source["position"]["y"]
     tx, ty = target["position"]["x"], target["position"]["y"]
@@ -81,15 +106,30 @@ def _edge_svg(edge, nodes, ox, oy):
     ]
     label = edge.get("label") or ""
     if label:
+        label_color = style.get("color", "#1a1a1a")
         parts.append(
-            f'<text x="{midx:.1f}" y="{(y1 + y2) / 2 - 6:.1f}" fill="{_esc(style["color"])}" '
+            f'<text x="{midx:.1f}" y="{(y1 + y2) / 2 - 6:.1f}" fill="{_esc(label_color)}" '
             f'font-size="11" text-anchor="middle">{_esc(label)}</text>'
         )
     return "".join(parts)
 
 
 def _node_svg(node, ox, oy):
-    style = {**default_style(), **(node.get("style") or {})}
+    base = {**_EXPORT_STYLE}
+    # Apply ER-specific palette for recognized shapes.
+    er_override = _ER_EXPORT.get(node.get("type"))
+    if er_override:
+        base.update(er_override)
+    # Use only structural overrides from canonical style (ignore fill/color on
+    # export so the white-background palette stays consistent).
+    raw = node.get("style") or {}
+    style = {
+        **base,
+        "fontSize": raw.get("fontSize", base["fontSize"]),
+        "fontStyle": raw.get("fontStyle", base["fontStyle"]),
+        "fontWeight": raw.get("fontWeight", base["fontWeight"]),
+        "opacity": raw.get("opacity", base["opacity"]),
+    }
     x = node["position"]["x"] - ox
     y = node["position"]["y"] - oy
     w = node["size"]["width"]
@@ -110,23 +150,79 @@ def _node_svg(node, ox, oy):
         shape = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="18" {common}/>'
 
     label = node.get("label") or ""
-    lines = [label]
     attrs = node.get("attributes") or []
-    if attrs and node_type not in ("class", "interface"):
-        lines.append(", ".join(str(a) for a in attrs))
-
+    methods = node.get("methods") or []
     parts = [shape]
     font_size = style.get("fontSize", 13)
     line_height = font_size + 4
-    text_h = line_height * len(lines)
-    ty = y + h / 2 - text_h / 2 + line_height * 0.8
-    for line in lines:
+    color = _esc(style["color"])
+    font = _esc(style.get("font", "Segoe UI"))
+
+    if node_type in ("entity", "weakEntity"):
+        # ER entity: name only. Attributes are separate oval nodes.
+        name_y = y + h / 2 + font_size * 0.35
         parts.append(
-            f'<text x="{x + w / 2:.1f}" y="{ty:.1f}" fill="{_esc(style["color"])}" '
-            f'font-size="{font_size}" text-anchor="middle" '
-            f'font-family="{_esc(style.get("font", "Segoe UI"))}">{_esc(line)}</text>'
+            f'<text x="{x + w / 2:.1f}" y="{name_y:.1f}" fill="{color}" '
+            f'font-size="{font_size}" font-weight="700" text-anchor="middle" '
+            f'font-family="{font}">{_esc(label)}</text>'
         )
-        ty += line_height
+    elif node_type in ("class", "interface"):
+        # UML class: name | attributes | methods. All three compartments are
+        # always drawn, even when one of them is empty.
+        prefix = "\u00ABinterface\u00BB " if node_type == "interface" else ""
+        name_h = font_size + 12
+        body_h = max(1.0, h - name_h)
+        line1_y = y + name_h
+        line2_y = y + name_h + body_h / 2
+        member_size = max(9, font_size - 2)
+
+        parts.append(
+            f'<text x="{x + w / 2:.1f}" y="{y + name_h / 2 + font_size * 0.35:.1f}" fill="{color}" '
+            f'font-size="{font_size}" font-weight="700" text-anchor="middle" '
+            f'font-family="{font}">{_esc(prefix + label)}</text>'
+        )
+        for divider_y in (line1_y, line2_y):
+            if divider_y < y + h:
+                parts.append(
+                    f'<line x1="{x:.1f}" y1="{divider_y:.1f}" x2="{x + w:.1f}" y2="{divider_y:.1f}" '
+                    f'stroke="{color}" stroke-width="0.8" opacity="0.5"/>'
+                )
+
+        attr_y = line1_y + member_size + 4
+        for a in attrs:
+            if attr_y > line2_y - 2:
+                break
+            parts.append(
+                f'<text x="{x + 6:.1f}" y="{attr_y:.1f}" fill="{color}" '
+                f'font-size="{member_size}" text-anchor="start" '
+                f'font-family="{font}">{_esc(str(a))}</text>'
+            )
+            attr_y += member_size + 3
+
+        mth_y = line2_y + member_size + 4
+        for m in methods:
+            if mth_y > y + h - 2:
+                break
+            parts.append(
+                f'<text x="{x + 6:.1f}" y="{mth_y:.1f}" fill="{color}" '
+                f'font-size="{member_size}" text-anchor="start" '
+                f'font-family="{font}">{_esc(str(m))}</text>'
+            )
+            mth_y += member_size + 3
+    else:
+        # Generic node: label centered, with comma-separated attrs below.
+        lines = [label]
+        if attrs:
+            lines.append(", ".join(str(a) for a in attrs))
+        text_h = line_height * len(lines)
+        ty = y + h / 2 - text_h / 2 + line_height * 0.8
+        for line in lines:
+            parts.append(
+                f'<text x="{x + w / 2:.1f}" y="{ty:.1f}" fill="{color}" '
+                f'font-size="{font_size}" text-anchor="middle" '
+                f'font-family="{font}">{_esc(line)}</text>'
+            )
+            ty += line_height
     return "".join(parts)
 
 
@@ -134,7 +230,7 @@ def diagram_to_svg(diagram) -> str:
     nodes = diagram.get("nodes") or []
     edges = diagram.get("edges") or []
     if not nodes:
-        return _wrap(800, 500, '<rect x="0" y="0" width="800" height="500" fill="#101722"/>', 800, 500)
+        return _wrap(800, 500, '<rect x="0" y="0" width="800" height="500" fill="#ffffff"/>', 800, 500)
 
     pad = 40
     x_min = min(n["position"]["x"] for n in nodes)
@@ -144,7 +240,7 @@ def diagram_to_svg(diagram) -> str:
     width = x_max - x_min + pad * 2
     height = y_max - y_min + pad * 2
 
-    parts = [f'<rect x="0" y="0" width="{width:.0f}" height="{height:.0f}" fill="#101722"/>']
+    parts = [f'<rect x="0" y="0" width="{width:.0f}" height="{height:.0f}" fill="#ffffff"/>']
     for edge in edges:
         parts.append(_edge_svg(edge, nodes, x_min - pad, y_min - pad))
     for node in nodes:
@@ -159,10 +255,10 @@ def _wrap(width, height, body, _w=None, _h=None):
         f'viewBox="0 0 {width:.0f} {height:.0f}">'
         "<defs>"
         '<marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">'
-        '<path d="M0,0 L10,4 L0,8 z" fill="#8fb4d9"/></marker>'
+        '<path d="M0,0 L10,4 L0,8 z" fill="#3a6b9f"/></marker>'
         '<marker id="arrow-start" markerWidth="10" markerHeight="8" refX="1" refY="4" orient="auto" '
         'markerUnits="userSpaceOnUse">'
-        '<path d="M10,0 L0,4 L10,8 z" fill="#8fb4d9"/></marker>'
+        '<path d="M10,0 L0,4 L10,8 z" fill="#3a6b9f"/></marker>'
         "</defs>"
         f"{body}</svg>"
     )

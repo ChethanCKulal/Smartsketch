@@ -3,8 +3,26 @@ import {
   createCanonicalEdge,
   createCanonicalNode,
   emptyDiagram,
+  enforceFamily,
   validateDiagram,
 } from "../../schema/canonical";
+import { measureNode } from "../autosize";
+
+/**
+ * Fit a node's box to the text it holds.
+ *
+ * Recognition sizes boxes from the photograph, so a shape can arrive far
+ * taller than its text. Nodes the user resized by hand are left alone.
+ */
+function fitToText(node) {
+  if (!node || node.autoSize === false || node.type === "group") return node;
+  const size = measureNode(node);
+  if (size) {
+    node.size = size;
+    node.autoSize = true;
+  }
+  return node;
+}
 
 function findNode(diagram, predicate) {
   return diagram.nodes.find(predicate);
@@ -21,12 +39,27 @@ function byType(diagram, type) {
 
 export function applyCommand(diagram, command) {
   const action = command.action;
-  const payload = command.payload || {};
+  let payload = command.payload || {};
   const next = structuredClone(diagram);
+
+  // The active diagram family owns the shape vocabulary: every command that
+  // introduces or retypes a node passes through the family filter.
+  if (next.diagram_type) {
+    if (payload.type && action !== ACTIONS.LOAD_DIAGRAM) {
+      payload = { ...payload, type: enforceFamily(payload.type, next.diagram_type) };
+    }
+    if (action === ACTIONS.SET_DIAGRAM_TYPE && payload.diagram_type !== next.diagram_type) {
+      // Retyping the whole diagram migrates every node into the new family.
+      next.nodes = next.nodes.map((n) => ({
+        ...n,
+        type: n.type === "group" ? n.type : enforceFamily(n.type, payload.diagram_type),
+      }));
+    }
+  }
 
   switch (action) {
     case ACTIONS.ADD_NODE: {
-      const node = createCanonicalNode(payload);
+      const node = fitToText(createCanonicalNode(payload));
       next.nodes.push(node);
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: `Added ${node.label}.`, result: node };
@@ -38,6 +71,16 @@ export function applyCommand(diagram, command) {
       next.edges = next.edges.filter((e) => e.source !== id && e.target !== id);
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: "Deleted node." };
+    }
+    case ACTIONS.DELETE_BY_TYPE: {
+      // "Delete the diamond" — resolve a type to a concrete node deterministically.
+      const candidates = byType(next, payload.type);
+      if (!candidates.length) return { ok: false, diagram, error: `No ${payload.type} found.` };
+      const target = candidates[0];
+      next.nodes = next.nodes.filter((n) => n.id !== target.id && n.parentId !== target.id);
+      next.edges = next.edges.filter((e) => e.source !== target.id && e.target !== target.id);
+      next.meta.updatedAt = new Date().toISOString();
+      return { ok: true, diagram: next, message: `Deleted ${target.label}.` };
     }
     case ACTIONS.DELETE_SELECTION: {
       const ids = new Set(payload.ids || []);
@@ -78,6 +121,7 @@ export function applyCommand(diagram, command) {
       if (node.locked) return { ok: false, diagram, error: `${node.label} is locked.` };
       node.size.width = Math.max(40, payload.size?.width ?? node.size.width * (payload.scale || 1.2));
       node.size.height = Math.max(28, payload.size?.height ?? node.size.height * (payload.scale || 1.2));
+      node.autoSize = false; // hand-resized shapes keep the size the user chose
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: `Resized ${node.label}.` };
     }
@@ -85,8 +129,26 @@ export function applyCommand(diagram, command) {
       const node = payload.id ? next.nodes.find((n) => n.id === payload.id) : byLabel(next, payload.from);
       if (!node) return { ok: false, diagram, error: "Node not found." };
       node.label = payload.label ?? payload.to ?? node.label;
+      fitToText(node);
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: `Renamed to ${node.label}.` };
+    }
+    case ACTIONS.FIT_TEXT: {
+      // Explicit refit: every shape (or just the selection) hugs its text.
+      const ids = payload.ids?.length ? payload.ids : null;
+      let fitted = 0;
+      for (const node of next.nodes) {
+        if (ids && !ids.includes(node.id)) continue;
+        if (node.type === "group") continue;
+        const size = measureNode(node);
+        if (!size) continue;
+        node.size = size;
+        node.autoSize = true;
+        fitted += 1;
+      }
+      if (!fitted) return { ok: false, diagram, error: "No shapes to fit." };
+      next.meta.updatedAt = new Date().toISOString();
+      return { ok: true, diagram: next, message: `Fitted ${fitted} shape${fitted === 1 ? "" : "s"} to their text.` };
     }
     case ACTIONS.UPDATE_NODE: {
       const node = next.nodes.find((n) => n.id === payload.id);
@@ -94,7 +156,12 @@ export function applyCommand(diagram, command) {
       Object.assign(node, payload.patch || {});
       if (payload.patch?.style) node.style = { ...node.style, ...payload.patch.style };
       if (payload.patch?.position) node.position = { ...node.position, ...payload.patch.position };
-      if (payload.patch?.size) node.size = { ...node.size, ...payload.patch.size };
+      if (payload.patch?.size) {
+        node.size = { ...node.size, ...payload.patch.size };
+        node.autoSize = false; // an explicit size wins over fitting to text
+      } else if (["label", "attributes", "methods"].some((key) => key in (payload.patch || {}))) {
+        fitToText(node);
+      }
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next };
     }
@@ -106,6 +173,9 @@ export function applyCommand(diagram, command) {
         ? next.nodes.find((n) => n.id === payload.targetId)
         : byLabel(next, payload.target);
       if (!source || !target) return { ok: false, diagram, error: "Could not find both nodes to connect." };
+      if (source.id === target.id) {
+        return { ok: false, diagram, error: "A node cannot connect to itself." };
+      }
       const exists = next.edges.some((e) => e.source === source.id && e.target === target.id);
       if (exists) return { ok: false, diagram, error: "Those nodes are already connected." };
       const edge = createCanonicalEdge({
@@ -131,6 +201,23 @@ export function applyCommand(diagram, command) {
       }
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: "Disconnected." };
+    }
+    case ACTIONS.RECONNECT: {
+      // One reversible action so reconnecting an edge is a single undo step.
+      const edge = next.edges.find((e) => e.id === payload.id);
+      if (!edge) return { ok: false, diagram, error: "Edge not found." };
+      const newSource = payload.sourceId || edge.source;
+      const newTarget = payload.targetId || edge.target;
+      const exists = next.edges.some(
+        (e) => e.id !== edge.id && e.source === newSource && e.target === newTarget
+      );
+      if (exists) return { ok: false, diagram, error: "Those nodes are already connected." };
+      edge.source = newSource;
+      edge.target = newTarget;
+      edge.sourceHandle = payload.sourceHandle || null;
+      edge.targetHandle = payload.targetHandle || null;
+      next.meta.updatedAt = new Date().toISOString();
+      return { ok: true, diagram: next, message: "Reconnected edge." };
     }
     case ACTIONS.UPDATE_EDGE: {
       const edge = next.edges.find((e) => e.id === payload.id);
@@ -224,7 +311,9 @@ export function applyCommand(diagram, command) {
       const loaded = {
         ...emptyDiagram(payload.diagram.diagram_type),
         ...payload.diagram,
-        nodes: (payload.diagram.nodes || []).map((n) => createCanonicalNode(n)),
+        nodes: (payload.diagram.nodes || []).map((n) =>
+          fitToText(createCanonicalNode({ ...n, type: enforceFamily(n.type, payload.diagram.diagram_type) }))
+        ),
         edges: (payload.diagram.edges || []).filter((e) => e.source && e.target).map((e) => createCanonicalEdge(e)),
       };
       loaded.meta = { ...emptyDiagram().meta, ...(payload.diagram.meta || {}) };
@@ -234,12 +323,12 @@ export function applyCommand(diagram, command) {
       const idMap = {};
       const offset = payload.offset || { x: 32, y: 32 };
       const copies = (payload.nodes || []).map((n) => {
-        const copy = createCanonicalNode({
+        const copy = fitToText(createCanonicalNode({
           ...n,
           id: undefined,
           position: { x: n.position.x + offset.x, y: n.position.y + offset.y },
           parentId: null,
-        });
+        }));
         idMap[n.id] = copy.id;
         return copy;
       });
@@ -264,6 +353,7 @@ export function applyCommand(diagram, command) {
       const name = String(payload.attribute || "").trim();
       if (!name) return { ok: false, diagram, error: "Attribute name is empty." };
       if (!node.attributes.includes(name)) node.attributes.push(name);
+      fitToText(node);
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: `Added ${name} to ${node.label}.` };
     }
@@ -272,6 +362,7 @@ export function applyCommand(diagram, command) {
       if (!node) return { ok: false, diagram, error: "Entity not found." };
       const name = String(payload.attribute || "").trim().toLowerCase();
       node.attributes = node.attributes.filter((a) => a.toLowerCase() !== name);
+      fitToText(node);
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next, message: `Removed attribute from ${node.label}.` };
     }

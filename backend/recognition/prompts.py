@@ -32,9 +32,17 @@ HINT_BLOCKS = {
     ),
     "uml": (
         "\nThe user identified this as a UML CLASS DIAGRAM. Treat that as authoritative.\n"
-        "Classify per UML notation: boxes (especially with internal compartment lines) = class —\n"
-        "list their members in \"attributes\" and \"methods\", circles/ovals = usecase,\n"
-        "stick figures = actor. diagram_type must be \"uml\".\n"
+        "Every class box has THREE compartments and all three must be filled:\n"
+        "1) the class name -> the node's \"label\" (the name alone, nothing else);\n"
+        "2) its attributes -> the node's \"attributes\" array, one string per member\n"
+        "   (keep any visibility marker, e.g. \"- name: String\");\n"
+        "3) its methods -> the node's \"methods\" array, one string per member\n"
+        "   (e.g. \"+ enroll(): void\").\n"
+        "Members ending in \"()\" or containing \"(\" are methods, everything else is an attribute.\n"
+        "Never merge the name, attributes and methods into one label.\n"
+        "Classify per UML notation: boxes (especially with internal compartment lines) = class,\n"
+        "circles/ovals = usecase, stick figures = actor, boxes marked «interface» = interface.\n"
+        "diagram_type must be \"uml\".\n"
     ),
     "dfd": (
         "\nThe user identified this as a DATA FLOW DIAGRAM (DFD). Treat that as authoritative.\n"

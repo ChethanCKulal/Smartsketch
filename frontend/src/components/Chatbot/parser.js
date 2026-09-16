@@ -81,10 +81,10 @@ export function parseChatCommand(raw) {
     return cmd(ACTIONS.ADD_NODE, { type, label });
   }
 
-  m = lower.match(/^delete the ([a-z ]+)$/);
+  m = lower.match(/^delete (?:the|a|an) ([a-z ]+)$/);
   if (m) {
     const type = TYPE_ALIASES[m[1].trim()];
-    if (type) return cmd(ACTIONS.CHANGE_TYPE, { fromType: type, type, _deleteByType: true });
+    if (type) return cmd(ACTIONS.DELETE_BY_TYPE, { type });
   }
 
   m = lower.match(/^delete (.+) from (.+)$/);

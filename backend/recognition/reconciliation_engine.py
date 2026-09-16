@@ -7,6 +7,8 @@ Neither source overwrites the other; a new merged structure is produced.
 from copy import deepcopy
 from difflib import SequenceMatcher
 
+from diagram.normalizer import merge_members
+
 
 class WeightStrategy:
     def __init__(self, weights=None):
@@ -186,11 +188,10 @@ def _merge_nodes(a, b, strategy, disagreements):
             }
         )
     merged = deepcopy(primary)
-    attrs = []
-    for value in (a.get("attributes") or []) + (b.get("attributes") or []):
-        if value not in attrs:
-            attrs.append(value)
-    merged["attributes"] = attrs
+    # Keep every member either service found — a UML class must not lose the
+    # methods that only one model read out of its second compartment.
+    for field in ("attributes", "methods"):
+        merged[field] = merge_members((a.get(field) or []) + (b.get(field) or []))
     merged["sources"] = sorted(set(a.get("sources") + b.get("sources")))
     if label_agree and type_agree:
         merged["confidence"] = strategy.combine_agreeing(

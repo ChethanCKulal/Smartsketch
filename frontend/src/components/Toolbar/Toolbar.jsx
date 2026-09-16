@@ -99,6 +99,17 @@ export default function Toolbar({ onUpload, onOpenFile }) {
         <Tip title="Fit to screen" onClick={() => window.__scFit?.({ padding: 0.2 })}>
           Fit
         </Tip>
+        <Tip
+          title={
+            selectedIds.length
+              ? "Resize the selected shapes to their text"
+              : "Resize every shape to the text it holds"
+          }
+          onClick={() => dispatch({ action: ACTIONS.FIT_TEXT, payload: { ids: selectedIds } })}
+          disabled={!diagram.nodes.length}
+        >
+          Fit text
+        </Tip>
       </div>
       <div className="toolbar-group">
         <Tip

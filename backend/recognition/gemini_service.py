@@ -21,6 +21,7 @@ Schema:
       "type": "process|decision|terminator|io|document|database|class|interface|entity|attribute|relationship|weakEntity|dfdProcess|dataStore|externalEntity|rectangle|diamond|ellipse",
       "label": "string",
       "attributes": ["optional"],
+      "methods": ["optional"],
       "bbox": [x1, y1, x2, y2],
       "confidence": 0.0
     }
@@ -37,7 +38,8 @@ Schema:
   ]
 }
 
-Identify shapes, text, entities, attributes, relationships, connectors, arrow directions, approximate pixel positions, and confidence.
+Identify shapes, text, entities, attributes, methods, relationships, connectors, arrow directions, approximate pixel positions, and confidence.
+A class/interface label is ONLY the class name — its members go in "attributes" and "methods", never in the label.
 Use "rectangle" only when a shape matches no domain notation.
 DIAGRAM_TYPE_HINT
 """

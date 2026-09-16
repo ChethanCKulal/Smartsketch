@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { parseChatCommand } from "./parser";
 import { ACTIONS } from "../../canvas/commands/types";
+import { enforceFamily } from "../../schema/canonical";
 import { useDiagramStore } from "../../state/diagramStore";
 
 export default function Chatbot() {
@@ -35,18 +36,16 @@ export default function Chatbot() {
       return;
     }
     const command = parsed.command;
+    // Chatbot-provided types join the active family's vocabulary, same as
+    // mouse and properties-panel edits.
+    if (command.payload?.type && diagram.diagram_type) {
+      command.payload.type = enforceFamily(command.payload.type, diagram.diagram_type);
+    }
+    if (command.action === ACTIONS.DELETE_BY_TYPE) {
+      command.payload.type = enforceFamily(command.payload.type, diagram.diagram_type);
+    }
     if (command.action === ACTIONS.GROUP) command.payload.ids = selectedIds;
     if (command.action === ACTIONS.UNGROUP) command.payload.ids = selectedIds;
-    if (command.payload?._deleteByType) {
-      const match = diagram.nodes.find((n) => n.type === command.payload.fromType);
-      if (!match) {
-        pushChat({ role: "bot", text: `No ${command.payload.fromType} found.` });
-        return;
-      }
-      const result = dispatch({ action: ACTIONS.DELETE_NODE, payload: { id: match.id } });
-      pushChat({ role: "bot", text: result.ok ? result.message : result.error });
-      return;
-    }
     if (command.action === ACTIONS.MOVE_NODE && command.payload.relativeTo) {
       const other = diagram.nodes.find(
         (n) => n.label.toLowerCase() === String(command.payload.relativeTo).toLowerCase()
