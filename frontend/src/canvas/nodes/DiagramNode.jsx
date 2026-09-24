@@ -1,4 +1,5 @@
-import { Handle, NodeResizer, Position } from "@xyflow/react";
+import { Handle, NodeResizer } from "@xyflow/react";
+import { SIDES, SIDE_POSITION, anchorId, slotPercent } from "../handles";
 import { useDiagramStore } from "../../state/diagramStore";
 
 const CLIP = {
@@ -62,6 +63,32 @@ function shellStyle(node) {
   return { ...base, borderRadius: 4 };
 }
 
+/**
+ * Renders the node's connection anchors: at least one per side, plus extra
+ * slots where several arrows share a side. Anchors are planned per diagram so
+ * each arrow gets its own point.
+ */
+function NodeAnchors({ counts }) {
+  const handles = [];
+  for (const side of SIDES) {
+    const count = Math.max(1, counts?.[side] || 0);
+    for (let slot = 0; slot < count; slot += 1) {
+      const percent = `${slotPercent(slot, count)}%`;
+      const vertical = side === "top" || side === "bottom";
+      handles.push(
+        <Handle
+          key={anchorId(side, slot)}
+          id={anchorId(side, slot)}
+          type="source"
+          position={SIDE_POSITION[side]}
+          style={vertical ? { left: percent } : { top: percent }}
+        />
+      );
+    }
+  }
+  return handles;
+}
+
 export default function DiagramNode({ data, selected, id }) {
   const node = data.canonical;
   const style = shellStyle(node);
@@ -86,10 +113,7 @@ export default function DiagramNode({ data, selected, id }) {
         minHeight={28}
         color="#4c8dff"
       />
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
-      <Handle type="target" position={Position.Left} id="l" />
-      <Handle type="source" position={Position.Right} id="r" />
+      <NodeAnchors counts={data.anchors} />
       {node.type === "actor" ? (
         <div style={{ textAlign: "center", lineHeight: 1.1 }}>
           <div style={{ fontSize: 22 }}>☺</div>

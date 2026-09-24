@@ -1,11 +1,16 @@
 import { MarkerType } from "@xyflow/react";
+import { planAnchors } from "./handles";
 
 export function diagramToFlow(diagram) {
+  // Anchors are planned for the whole diagram at once: which side and slot each
+  // arrow leaves from depends on the other arrows meeting the same shape.
+  const plan = planAnchors(diagram);
+
   const nodes = (diagram.nodes || []).map((node) => ({
     id: node.id,
     type: "diagramNode",
     position: { ...node.position },
-    data: { canonical: node },
+    data: { canonical: node, anchors: plan.counts.get(node.id) },
     parentId: node.parentId || undefined,
     extent: node.parentId ? "parent" : undefined,
     draggable: !node.locked,
@@ -18,40 +23,16 @@ export function diagramToFlow(diagram) {
     zIndex: node.type === "group" ? 0 : 1,
   }));
 
-  // Build a lookup for source/target positions to auto-select best handles.
-  const nodeMap = new Map();
-  for (const n of nodes) {
-    const c = n.data.canonical;
-    nodeMap.set(n.id, {
-      cx: (c.position?.x || 0) + (c.size?.width || 160) / 2,
-      cy: (c.position?.y || 0) + (c.size?.height || 80) / 2,
-    });
-  }
-
   const edges = (diagram.edges || []).map((edge) => {
-    const src = nodeMap.get(edge.source);
-    const tgt = nodeMap.get(edge.target);
-    // Auto-select handles when not explicitly stored (recognition / chatbot).
-    let sourceHandle = edge.sourceHandle || undefined;
-    let targetHandle = edge.targetHandle || undefined;
-    if (src && tgt && !sourceHandle && !targetHandle) {
-      const dx = tgt.cx - src.cx;
-      const dy = tgt.cy - src.cy;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        sourceHandle = dx >= 0 ? "r" : "l";
-        targetHandle = dx >= 0 ? "l" : "r";
-      } else {
-        // top/bottom use React Flow default handle id (undefined)
-        sourceHandle = undefined;
-        targetHandle = undefined;
-      }
-    }
+    // A stored handle only expresses which side the user dragged from; the
+    // planned anchor decides the exact slot on that side.
+    const anchor = plan.anchors.get(edge.id) || {};
     return {
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    sourceHandle,
-    targetHandle,
+    sourceHandle: anchor.sourceHandle,
+    targetHandle: anchor.targetHandle,
     label: edge.label,
     type: "diagramEdge",
     data: { canonical: edge },

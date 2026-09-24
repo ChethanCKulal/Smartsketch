@@ -17,3 +17,18 @@ Port 5173 is in use, trying another one...
 [2m8:08:05 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Toolbar/Toolbar.jsx[22m
 [2m8:08:05 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Canvas/Canvas.jsx[22m
 [2m8:14:42 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/canvas/nodes/DiagramNode.jsx[22m
+[2m8:29:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Canvas/Canvas.jsx[22m
+[2m8:29:23 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/canvas/nodes/DiagramNode.jsx[22m
+[2m8:29:31 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Canvas/Canvas.jsx, /src/canvas/nodes/DiagramNode.jsx[22m
+[2m8:29:35 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/canvas/nodes/DiagramNode.jsx[22m
+[2m8:29:35 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Canvas/Canvas.jsx[22m
+[2m8:29:51 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/Canvas/Canvas.jsx, /src/canvas/nodes/DiagramNode.jsx[22m
+[2m8:30:36 pm[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/health[39m
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1645:16)
+[2m8:30:36 pm[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/health[39m
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1645:16)
+[2m8:31:12 pm[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/recognize[39m
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1645:16)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
+  ConnectionMode,
   Controls,
   MiniMap,
   SelectionMode,
@@ -176,6 +177,9 @@ export default function Canvas() {
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onReconnect={onReconnect}
+        // Loose mode lets any anchor start or receive an arrow, which is what
+        // the single-handle-per-slot grid relies on.
+        connectionMode={ConnectionMode.Loose}
         onSelectionChange={onSelectionChange}
         onMoveEnd={() => setZoom(getZoom())}
         snapToGrid={snapToGrid}

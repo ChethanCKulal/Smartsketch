@@ -6,44 +6,22 @@ Press CTRL+C to quit
  * Restarting with stat
  * Debugger is active!
  * Debugger PIN: 318-081-196
- * Detected change in 'C:\\smartsketch\\backend\\export\\svg_export.py', reloading
- * Restarting with stat
- * Debugger is active!
- * Debugger PIN: 318-081-196
-127.0.0.1 - - [13/Sep/2026 13:34:30] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:34:30] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:35:13] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:35:13] "GET /api/health HTTP/1.1" 200 -
- * Detected change in 'C:\\smartsketch\\backend\\tests\\test_svg_export.py', reloading
- * Restarting with stat
- * Debugger is active!
- * Debugger PIN: 318-081-196
-127.0.0.1 - - [13/Sep/2026 13:40:09] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:09] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:41] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:41] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:42] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:42] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:40:43] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:41:18] "POST /api/recognize HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:42:54] "POST /api/recognize HTTP/1.1" 200 -
- * Detected change in 'C:\\smartsketch\\backend\\export\\svg_export.py', reloading
- * Restarting with stat
- * Debugger is active!
- * Debugger PIN: 318-081-196
- * Detected change in 'C:\\smartsketch\\backend\\tests\\test_svg_export.py', reloading
- * Restarting with stat
- * Debugger is active!
- * Debugger PIN: 318-081-196
-127.0.0.1 - - [13/Sep/2026 13:46:52] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:46:52] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:49:58] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:49:58] "GET /api/health HTTP/1.1" 200 -
-127.0.0.1 - - [13/Sep/2026 13:50:42] "POST /api/recognize HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:31:35] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:31:56] "POST /api/recognize HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:51:41] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:51:41] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:30] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:31] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:31] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:31] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:53:31] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 20:54:14] "POST /api/recognize HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 21:42:10] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 21:42:10] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 22:20:37] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [16/Sep/2026 22:20:37] "GET /api/health HTTP/1.1" 200 -
