@@ -20,7 +20,11 @@ def recognize():
         return jsonify({"error": "No image uploaded."}), 400
 
     diagram_type = (request.form.get("diagram_type") or "auto").lower()
-    auto_detect = request.form.get("auto_detect", "true").lower() == "true"
+    auto_detect_raw = request.form.get("auto_detect")
+    if auto_detect_raw is not None:
+        auto_detect = auto_detect_raw.lower() == "true"
+    else:
+        auto_detect = diagram_type == "auto"
     hint = "auto" if auto_detect or diagram_type == "auto" else diagram_type
 
     try:

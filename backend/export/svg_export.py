@@ -140,12 +140,26 @@ def _node_svg(node, ox, oy):
     node_type = node.get("type", "rectangle")
 
     common = f'fill="{fill}" stroke="{stroke}" stroke-width="{border_w}"'
-    shape = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="6" {common}/>'
-    if node_type in ("ellipse", "usecase", "attribute", "terminator"):
+    shape = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="4" {common}/>'
+    if node_type in ("ellipse", "usecase", "attribute"):
         shape = f'<ellipse cx="{x + w / 2:.1f}" cy="{y + h / 2:.1f}" rx="{w / 2:.1f}" ry="{h / 2:.1f}" {common}/>'
+    elif node_type == "terminator":
+        r = min(h / 2, 24)
+        shape = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{r:.1f}" ry="{r:.1f}" {common}/>'
     elif node_type in ("diamond", "decision", "relationship"):
         pts = f"{x + w / 2:.1f},{y:.1f} {x + w:.1f},{y + h / 2:.1f} {x + w / 2:.1f},{y + h:.1f} {x:.1f},{y + h / 2:.1f}"
         shape = f'<polygon points="{pts}" {common}/>'
+    elif node_type in ("io", "parallelogram"):
+        offset = w * 0.18
+        pts = f"{x + offset:.1f},{y:.1f} {x + w:.1f},{y:.1f} {x + w - offset:.1f},{y + h:.1f} {x:.1f},{y + h:.1f}"
+        shape = f'<polygon points="{pts}" {common}/>'
+    elif node_type == "dataStore":
+        shape = f'<path d="M {x + w:.1f} {y:.1f} L {x:.1f} {y:.1f} L {x:.1f} {y + h:.1f} L {x + w:.1f} {y + h:.1f}" fill="{fill}" stroke="{stroke}" stroke-width="{border_w}" stroke-linecap="round"/>'
+    elif node_type == "weakEntity":
+        shape = (
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="2" {common}/>'
+            f'<rect x="{x + 4:.1f}" y="{y + 4:.1f}" width="{max(1, w - 8):.1f}" height="{max(1, h - 8):.1f}" rx="1" fill="none" stroke="{stroke}" stroke-width="{border_w}"/>'
+        )
     elif node_type in ("roundedRectangle", "process", "dfdProcess"):
         shape = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="18" {common}/>'
 

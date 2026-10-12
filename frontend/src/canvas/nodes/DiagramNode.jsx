@@ -8,6 +8,12 @@ const CLIP = {
   diamond: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
   parallelogram: "polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%)",
   document: "polygon(0 0, 100% 0, 100% 82%, 75% 92%, 50% 82%, 25% 92%, 0 82%)",
+  star: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+  arrowRight: "polygon(0% 25%, 65% 25%, 65% 0%, 100% 50%, 65% 100%, 65% 75%, 0% 75%)",
+  arrowLeft: "polygon(35% 0%, 35% 25%, 100% 25%, 100% 75%, 35% 75%, 35% 100%, 0% 50%)",
+  arrowUp: "polygon(50% 0%, 100% 35%, 75% 35%, 75% 100%, 25% 100%, 25% 35%, 0% 35%)",
+  arrowDown: "polygon(25% 0%, 75% 0%, 75% 65%, 100% 65%, 50% 100%, 0% 65%, 25% 65%)",
+  arrowBoth: "polygon(0% 50%, 25% 0%, 25% 25%, 75% 25%, 75% 0%, 100% 50%, 75% 100%, 75% 75%, 25% 75%, 25% 100%)",
 };
 
 function shellStyle(node) {
@@ -26,17 +32,42 @@ function shellStyle(node) {
     height: "100%",
     opacity: s.opacity,
   };
-  if (type === "ellipse" || type === "usecase" || type === "attribute" || type === "terminator") {
+  if (type === "terminator") {
+    return { ...base, borderRadius: 9999 };
+  }
+  if (type === "ellipse" || type === "usecase" || type === "attribute") {
     return { ...base, borderRadius: "50%" };
   }
   if (type === "roundedRectangle" || type === "process" || type === "dfdProcess") {
     return { ...base, borderRadius: 18 };
   }
+  if (type === "cloud") {
+    return { ...base, borderRadius: 28, borderStyle: "dashed" };
+  }
+  if (type === "stickyNote") {
+    return {
+      ...base,
+      borderRadius: 2,
+      background: s.fill === "#1e2a3a" ? "#fff3a8" : s.fill,
+      color: s.color === "#e8eef6" ? "#222222" : s.color,
+      boxShadow: "2px 6px 14px rgba(0,0,0,0.35)",
+    };
+  }
+  if (type === "callout") {
+    return { ...base, borderRadius: 16, borderBottomLeftRadius: 0 };
+  }
   if (type === "package") return { ...base, borderRadius: "8px 8px 4px 4px" };
-  if (CLIP[type]) return { ...base, clipPath: CLIP[type], border: 0, boxShadow: `inset 0 0 0 ${s.borderWidth || 2}px ${s.border}` };
-  if (type === "io") return { ...base, clipPath: CLIP.parallelogram, border: 0, boxShadow: `inset 0 0 0 2px ${s.border}` };
-  if (type === "relationship") return { ...base, clipPath: CLIP.diamond, border: 0, boxShadow: `inset 0 0 0 2px ${s.border}` };
-  if (type === "database") {
+  const borderFilter = `drop-shadow(${s.borderWidth || 1.5}px 0 0 ${s.border}) drop-shadow(-${s.borderWidth || 1.5}px 0 0 ${s.border}) drop-shadow(0 ${s.borderWidth || 1.5}px 0 ${s.border}) drop-shadow(0 -${s.borderWidth || 1.5}px 0 ${s.border})`;
+  if (type === "diamond" || type === "decision" || type === "relationship") {
+    return { ...base, clipPath: CLIP.diamond, border: 0, filter: borderFilter };
+  }
+  if (type === "io" || type === "parallelogram") {
+    return { ...base, clipPath: CLIP.parallelogram, border: 0, filter: borderFilter };
+  }
+  if (CLIP[type]) {
+    return { ...base, clipPath: CLIP[type], border: 0, filter: borderFilter };
+  }
+  if (type === "database" || type === "cylinder") {
     return { ...base, borderRadius: "50% / 18%", borderTop: `3px solid ${s.border}` };
   }
   if (type === "predefinedProcess") {
@@ -49,9 +80,12 @@ function shellStyle(node) {
     return { ...base, borderRadius: 2, padding: 0 };
   }
   if (type === "dataStore") {
-    return { ...base, borderLeft: `4px solid ${s.border}`, borderRight: 0, borderRadius: 0 };
+    return { ...base, borderLeft: `${Math.max(3, (s.borderWidth || 1.5) * 2)}px solid ${s.border}`, borderRight: 0, borderRadius: 0 };
   }
-  if (type === "externalEntity" || type === "class" || type === "interface" || type === "entity") {
+  if (type === "dataFlow") {
+    return { ...base, borderRadius: 16, borderStyle: "dashed" };
+  }
+  if (type === "externalEntity" || type === "class" || type === "interface") {
     return { ...base, borderRadius: 2 };
   }
   if (type === "text") {

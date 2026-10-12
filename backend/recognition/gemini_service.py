@@ -52,13 +52,14 @@ class RecognitionError(Exception):
         self.status = status
 
 
-# Tried in order when the configured model is retired or unavailable.
-# Each entry carries its own generationConfig extras: some models reject
-# thinkingConfig entirely, others only stay fast with thinking disabled.
+# Tried in order when the configured model is retired, rate-limited, or overloaded.
 FALLBACK_MODELS = (
-    ("gemini-3.6-flash", {}),
-    ("gemini-3.5-flash", {"thinkingConfig": {"thinkingBudget": 0}}),
+    ("gemini-3.8-flash", {}),
     ("gemini-flash-latest", {}),
+    ("gemini-flash-lite-latest", {}),
+    ("gemini-3.1-flash-lite", {}),
+    ("gemini-3-flash-preview", {}),
+    ("gemini-3.6-flash", {}),
 )
 
 
@@ -74,7 +75,7 @@ def recognize_with_gemini(image_bytes, mime_type="image/png", diagram_type="auto
         "maxOutputTokens": 8192,
     }
 
-    configured = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    configured = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     models = [(configured, {})] + [(m, extra) for m, extra in FALLBACK_MODELS if m != configured]
     last_response = None
     for model, extra_config in models:
@@ -99,25 +100,29 @@ def recognize_with_gemini(image_bytes, mime_type="image/png", diagram_type="auto
             response = requests.post(url, params={"key": api_key}, json=payload, timeout=90)
             # 5xx from Gemini is usually transient overload — retry once.
             if response.status_code >= 500:
-                time.sleep(2)
+                time.sleep(1.5)
                 response = requests.post(url, params={"key": api_key}, json=payload, timeout=90)
-        except requests.RequestException as exc:
-            raise RecognitionError(f"Gemini network failure: {exc}", "network", 503) from exc
+        except requests.RequestException:
+            # Network issue or timeout with this model, try next candidate
+            continue
         last_response = response
 
-        if response.status_code == 429:
-            raise RecognitionError("Gemini rate limit reached.", "rate_limit", 429)
-        # Retired/unknown model: transparently try the next candidate.
-        if response.status_code == 404 or (response.status_code == 400 and "model" in response.text.lower()):
+        # If rate-limited, retired, model-specific bad request, or overloaded, try next model candidate
+        if response.status_code in (429, 404, 500, 502, 503, 504) or (
+            response.status_code == 400 and "model" in response.text.lower()
+        ):
             continue
         if response.status_code >= 400:
-            raise RecognitionError(f"Gemini API failure ({response.status_code}).", "api_failure", 502)
+            continue
         return _parse_gemini(response)
 
-    if last_response is not None and last_response.status_code >= 400:
-        raise RecognitionError(
-            f"Gemini API failure ({last_response.status_code}): no usable model.", "api_failure", 502
-        )
+    if last_response is not None:
+        if last_response.status_code == 429:
+            raise RecognitionError("Gemini rate limit reached across available models.", "rate_limit", 429)
+        if last_response.status_code >= 400:
+            raise RecognitionError(
+                f"Gemini API failure ({last_response.status_code}): no usable model.", "api_failure", 502
+            )
     raise RecognitionError("Gemini returned no response.", "empty", 502)
 
 

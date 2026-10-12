@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SHAPE_LIBRARY } from "../../canvas/shapeCatalog";
 import { FAMILY_NODE_TYPES } from "../../schema/canonical";
 import { useDiagramStore } from "../../state/diagramStore";
@@ -11,19 +12,28 @@ const FAMILY_TITLES = {
 
 export default function ShapePanel() {
   const diagramType = useDiagramStore((s) => s.diagram.diagram_type);
+  const [showAll, setShowAll] = useState(false);
 
-  // Only the active family's shapes are offered: an ER diagram never shows
-  // flowchart shapes and vice versa.
-  const allowed = FAMILY_NODE_TYPES[diagramType];
-  const groups = SHAPE_LIBRARY.filter((g) => !g.family || g.family === diagramType);
+  const groups = showAll
+    ? SHAPE_LIBRARY
+    : SHAPE_LIBRARY.filter((g) => !g.family || g.family === diagramType);
 
   return (
     <aside className="left-panel">
-      <div className="panel-title">
-        Shape library {diagramType !== "unknown" ? `· ${FAMILY_TITLES[diagramType] || diagramType}` : ""}
+      <div className="panel-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Shapes</span>
+        <button
+          type="button"
+          className="tb-btn"
+          style={{ fontSize: 10, padding: "2px 6px", height: "auto" }}
+          onClick={() => setShowAll((v) => !v)}
+          title="Toggle between active family shapes and all diagram shapes"
+        >
+          {showAll ? "Filter" : "Show all"}
+        </button>
       </div>
       {groups.map((group) => {
-        const items = allowed ? group.items.filter((i) => allowed.includes(i.type)) : group.items;
+        const items = group.items;
         if (!items.length) return null;
         return (
           <div className="shape-group" key={group.category}>

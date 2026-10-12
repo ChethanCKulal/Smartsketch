@@ -152,8 +152,58 @@ button { cursor: pointer; }
 .shape-preview.package { width: 38px; border-radius: 4px 4px 2px 2px; border-top-width: 3px; }
 .shape-preview.actor { width: 18px; height: 26px; border-radius: 50% 50% 40% 40%; }
 .shape-preview.dataStore { width: 40px; border-left-width: 4px; border-right: 0; border-radius: 0; }
+.shape-preview.dataFlow { width: 36px; border-radius: 8px; border-style: dashed; }
+.shape-preview.cylinder { width: 36px; border-radius: 50% / 22%; }
+.shape-preview.star {
+  width: 28px;
+  height: 28px;
+  background: #7aa2c9;
+  border: 0;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+.shape-preview.cloud { width: 36px; border-radius: 14px; border-style: dashed; }
+.shape-preview.stickyNote { width: 32px; height: 28px; background: #fff2a8; border-color: #d6ca74; border-radius: 2px; }
+.shape-preview.callout { width: 36px; border-radius: 8px; border-bottom-left-radius: 0; }
+.shape-preview.arrowRight {
+  width: 32px;
+  height: 20px;
+  background: #7aa2c9;
+  border: 0;
+  margin-top: 4px;
+  clip-path: polygon(0% 25%, 65% 25%, 65% 0%, 100% 50%, 65% 100%, 65% 75%, 0% 75%);
+}
+.shape-preview.arrowLeft {
+  width: 32px;
+  height: 20px;
+  background: #7aa2c9;
+  border: 0;
+  margin-top: 4px;
+  clip-path: polygon(35% 0%, 35% 25%, 100% 25%, 100% 75%, 35% 75%, 35% 100%, 0% 50%);
+}
+.shape-preview.arrowUp {
+  width: 20px;
+  height: 28px;
+  background: #7aa2c9;
+  border: 0;
+  clip-path: polygon(50% 0%, 100% 35%, 75% 35%, 75% 100%, 25% 100%, 25% 35%, 0% 35%);
+}
+.shape-preview.arrowDown {
+  width: 20px;
+  height: 28px;
+  background: #7aa2c9;
+  border: 0;
+  clip-path: polygon(25% 0%, 75% 0%, 75% 65%, 100% 65%, 50% 100%, 0% 65%, 25% 65%);
+}
+.shape-preview.arrowBoth {
+  width: 34px;
+  height: 20px;
+  background: #7aa2c9;
+  border: 0;
+  margin-top: 4px;
+  clip-path: polygon(0% 50%, 25% 0%, 25% 25%, 75% 25%, 75% 0%, 100% 50%, 75% 100%, 75% 75%, 25% 75%, 25% 100%);
+}
 
-.canvas-wrap { position: relative; min-width: 0; background: #101722; }
+.canvas-wrap { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; background: #101722; }
 
 .status-bar {
   display: flex;

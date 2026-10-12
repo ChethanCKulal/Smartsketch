@@ -24,54 +24,121 @@ export default function PropertiesPanel() {
     return (
       <form className="prop-form" onSubmit={(e) => e.preventDefault()}>
         <label>
-          Label
+          Label / Words
           <input
             value={edge.label}
+            placeholder="Type words on line..."
             onChange={(e) =>
               dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: edge.id, patch: { label: e.target.value } } })
             }
           />
         </label>
-        <label>
-          Arrow type
-          <select
-            value={edge.arrow}
-            onChange={(e) =>
-              dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: edge.id, patch: { arrow: e.target.value } } })
-            }
-          >
-            <option value="forward">Forward</option>
-            <option value="backward">Backward</option>
-            <option value="both">Both</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label>
-          Line style
-          <select
-            value={edge.lineStyle}
-            onChange={(e) =>
-              dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: edge.id, patch: { lineStyle: e.target.value } } })
-            }
-          >
-            <option value="solid">Solid</option>
-            <option value="dashed">Dashed</option>
-            <option value="dotted">Dotted</option>
-          </select>
-        </label>
-        <label>
-          Color
-          <input
-            type="color"
-            value={toHex(edge.style?.border)}
-            onChange={(e) =>
-              dispatch({
-                action: ACTIONS.UPDATE_EDGE,
-                payload: { id: edge.id, patch: { style: { ...edge.style, border: e.target.value } } },
-              })
-            }
-          />
-        </label>
+        <div className="prop-row">
+          <label>
+            Arrow type
+            <select
+              value={edge.arrow}
+              onChange={(e) =>
+                dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: edge.id, patch: { arrow: e.target.value } } })
+              }
+            >
+              <option value="forward">Forward Arrow →</option>
+              <option value="backward">Backward Arrow ←</option>
+              <option value="both">Both Arrows ↔</option>
+              <option value="none">Plain Line —</option>
+            </select>
+          </label>
+          <label>
+            Line style
+            <select
+              value={edge.lineStyle}
+              onChange={(e) =>
+                dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: edge.id, patch: { lineStyle: e.target.value } } })
+              }
+            >
+              <option value="solid">Solid ───</option>
+              <option value="dashed">Dashed ╌╌╌</option>
+              <option value="dotted">Dotted ┄┄┄</option>
+            </select>
+          </label>
+        </div>
+        <div className="prop-row">
+          <label>
+            Line Color
+            <input
+              type="color"
+              value={toHex(edge.style?.border || "#7aa2c9")}
+              onChange={(e) =>
+                dispatch({
+                  action: ACTIONS.UPDATE_EDGE,
+                  payload: { id: edge.id, patch: { style: { ...edge.style, border: e.target.value } } },
+                })
+              }
+            />
+          </label>
+          <label>
+            Line Width
+            <input
+              type="number"
+              min="1"
+              max="12"
+              step="0.5"
+              value={edge.style?.borderWidth ?? 1.6}
+              onChange={(e) =>
+                dispatch({
+                  action: ACTIONS.UPDATE_EDGE,
+                  payload: { id: edge.id, patch: { style: { ...edge.style, borderWidth: Number(e.target.value) } } },
+                })
+              }
+            />
+          </label>
+        </div>
+        <div className="prop-row">
+          <label>
+            Words Text Color
+            <input
+              type="color"
+              value={toHex(edge.style?.color || "#e8eef6")}
+              onChange={(e) =>
+                dispatch({
+                  action: ACTIONS.UPDATE_EDGE,
+                  payload: { id: edge.id, patch: { style: { ...edge.style, color: e.target.value } } },
+                })
+              }
+            />
+          </label>
+          <label>
+            Words Background
+            <input
+              type="color"
+              value={toHex(edge.style?.fill || "#1b2533")}
+              onChange={(e) =>
+                dispatch({
+                  action: ACTIONS.UPDATE_EDGE,
+                  payload: { id: edge.id, patch: { style: { ...edge.style, fill: e.target.value } } },
+                })
+              }
+            />
+          </label>
+        </div>
+        <div style={{ marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Quick Line Colors:</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {["#4c8dff", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6", "#06b6d4", "#ffffff", "#e8eef6", "#64748b", "#0f172a"].map((c) => (
+              <button
+                key={c}
+                type="button"
+                style={{ width: 18, height: 18, borderRadius: 3, background: c, border: "1px solid var(--border)", cursor: "pointer" }}
+                onClick={() =>
+                  dispatch({
+                    action: ACTIONS.UPDATE_EDGE,
+                    payload: { id: edge.id, patch: { style: { ...edge.style, border: c } } },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
       </form>
     );
   }
@@ -149,13 +216,26 @@ export default function PropertiesPanel() {
       </div>
       <div className="prop-row">
         <label>
-          Fill
+          Background Fill
           <input type="color" value={toHex(node.style.fill)} onChange={(e) => patch({ style: { fill: e.target.value } })} />
         </label>
         <label>
-          Border
+          Border / Line
           <input type="color" value={toHex(node.style.border)} onChange={(e) => patch({ style: { border: e.target.value } })} />
         </label>
+      </div>
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Quick Fill Colors:</div>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {["#1e2a3a", "#123a66", "#1e3a2a", "#3a1e2a", "#2e1e3a", "#fff2a8", "#ffffff", "#334155", "#0f172a", "#222222"].map((c) => (
+            <button
+              key={c}
+              type="button"
+              style={{ width: 18, height: 18, borderRadius: 3, background: c, border: "1px solid var(--border)", cursor: "pointer" }}
+              onClick={() => patch({ style: { fill: c } })}
+            />
+          ))}
+        </div>
       </div>
       <div className="prop-row">
         <label>
@@ -183,7 +263,7 @@ export default function PropertiesPanel() {
       </div>
       <div className="prop-row">
         <label>
-          Color
+          Words / Text Color
           <input type="color" value={toHex(node.style.color)} onChange={(e) => patch({ style: { color: e.target.value } })} />
         </label>
         <label>
@@ -194,6 +274,19 @@ export default function PropertiesPanel() {
             onChange={(e) => patch({ style: { fontSize: Number(e.target.value) } })}
           />
         </label>
+      </div>
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Quick Text Colors:</div>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {["#e8eef6", "#ffffff", "#4c8dff", "#5cbc8a", "#d46565", "#d4b05c", "#6cb6ff", "#000000", "#1e293b", "#94a3b8"].map((c) => (
+            <button
+              key={c}
+              type="button"
+              style={{ width: 18, height: 18, borderRadius: 3, background: c, border: "1px solid var(--border)", cursor: "pointer" }}
+              onClick={() => patch({ style: { color: c } })}
+            />
+          ))}
+        </div>
       </div>
       <label>
         Font

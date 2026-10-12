@@ -31,6 +31,7 @@ FALLBACK_MODELS = (
     "Qwen/Qwen2.5-VL-72B-Instruct",
     "Qwen/Qwen3-VL-30B-A3B-Instruct",
     "Qwen/Qwen2.5-VL-7B-Instruct",
+    "meta-llama/Llama-3.2-11B-Vision-Instruct",
 )
 
 
@@ -68,24 +69,19 @@ def recognize_with_huggingface(image_bytes, mime_type="image/png", diagram_type=
                 json=payload,
                 timeout=90,
             )
-        except requests.RequestException as exc:
-            raise HuggingFaceError(f"Hugging Face network failure: {exc}", "network", 503) from exc
+        except requests.RequestException:
+            continue
         last_response = response
 
-        if response.status_code == 429:
-            raise HuggingFaceError("Hugging Face rate limit reached.", "rate_limit", 429)
-        # Unsupported/retired model: transparently try the next candidate.
-        if response.status_code == 404 or (
-            response.status_code == 400 and "model" in response.text.lower()
-        ):
+        if response.status_code in (400, 402, 404, 422, 429) or response.status_code >= 500:
             continue
-        if response.status_code >= 400:
-            raise HuggingFaceError(
-                f"Hugging Face API failure ({response.status_code}).", "api_failure", 502
-            )
         return _parse_huggingface(response)
 
-    if last_response is not None and last_response.status_code >= 400:
+    if last_response is not None:
+        if last_response.status_code == 402:
+            raise HuggingFaceError("Hugging Face API returned 402 (account credits exhausted).", "credits_exhausted", 402)
+        if last_response.status_code == 429:
+            raise HuggingFaceError("Hugging Face rate limit reached.", "rate_limit", 429)
         raise HuggingFaceError(
             f"Hugging Face API failure ({last_response.status_code}): no usable model.",
             "api_failure",

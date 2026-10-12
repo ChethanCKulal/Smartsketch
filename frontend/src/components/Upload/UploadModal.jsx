@@ -22,6 +22,7 @@ export default function UploadModal({ open, onClose, onRecognized }) {
   const [error, setError] = useState("");
   const [report, setReport] = useState(null);
   const [sourcesReport, setSourcesReport] = useState(null);
+  const [lastResult, setLastResult] = useState(null);
   const inputRef = useRef();
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function UploadModal({ open, onClose, onRecognized }) {
         diagramType,
         autoDetect: false,
       });
+      setLastResult(result);
       setReport(result.reconciliation);
       setSourcesReport(result.sources || null);
       setProgress("Recognition complete.");
@@ -189,7 +191,17 @@ export default function UploadModal({ open, onClose, onRecognized }) {
               </div>
             )}
             <div>Disagreements: {report.disagreements?.length || 0}</div>
-            {report.warnings?.length ? <div>Warnings: {report.warnings.join(" ")}</div> : null}
+            {report.warnings?.length ? (
+              <div style={{ marginTop: 6, color: "var(--warn)", fontSize: 11 }}>
+                {report.warnings.map((w, i) => (
+                  <div key={i}>
+                    ℹ️ {w.includes("400") || w.includes("402")
+                      ? "Hugging Face account has no remaining inference credits (requires pre-paid credits on HF). Gemini recognized the diagram successfully."
+                      : w}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -198,10 +210,21 @@ export default function UploadModal({ open, onClose, onRecognized }) {
             Close
           </button>
           <button className="btn-ghost" disabled={!file || !diagramType || busy} onClick={start}>
-            Retry / start recognition
+            Retry recognition
           </button>
-          <button className="btn-primary" disabled={!file || !diagramType || busy} onClick={start}>
-            Start recognition
+          <button
+            className="btn-primary"
+            disabled={!file || !diagramType || busy}
+            onClick={() => {
+              if (lastResult) {
+                onRecognized(lastResult);
+                onClose();
+              } else {
+                start();
+              }
+            }}
+          >
+            {lastResult ? "Apply to Canvas" : "Start recognition"}
           </button>
         </div>
       </div>

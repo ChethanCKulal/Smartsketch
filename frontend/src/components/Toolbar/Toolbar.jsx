@@ -174,6 +174,79 @@ export default function Toolbar({ onUpload, onOpenFile }) {
           ))}
         </select>
       </div>
+      <div className="toolbar-group" style={{ alignItems: "center", gap: 6, padding: "0 8px" }}>
+        <label
+          title="Change Fill / Background color of selection"
+          style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, cursor: "pointer", color: "var(--text)" }}
+        >
+          <span>Fill</span>
+          <input
+            type="color"
+            style={{ width: 22, height: 22, padding: 0, border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", background: "none" }}
+            value={selectedNodes[0]?.style?.fill?.startsWith("#") ? selectedNodes[0].style.fill : "#1e2a3a"}
+            onChange={(e) => {
+              const val = e.target.value;
+              for (const n of selectedNodes) {
+                dispatch({ action: ACTIONS.UPDATE_NODE, payload: { id: n.id, patch: { style: { ...n.style, fill: val } } } });
+              }
+            }}
+          />
+        </label>
+        <label
+          title="Change Border / Line color of selection"
+          style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, cursor: "pointer", color: "var(--text)" }}
+        >
+          <span>Line</span>
+          <input
+            type="color"
+            style={{ width: 22, height: 22, padding: 0, border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", background: "none" }}
+            value={
+              selectedNodes[0]?.style?.border?.startsWith("#")
+                ? selectedNodes[0].style.border
+                : diagram.edges.find((ed) => selectedEdgeIds.includes(ed.id))?.style?.border?.startsWith("#")
+                ? diagram.edges.find((ed) => selectedEdgeIds.includes(ed.id)).style.border
+                : "#7aa2c9"
+            }
+            onChange={(e) => {
+              const val = e.target.value;
+              for (const n of selectedNodes) {
+                dispatch({ action: ACTIONS.UPDATE_NODE, payload: { id: n.id, patch: { style: { ...n.style, border: val } } } });
+              }
+              for (const eId of selectedEdgeIds) {
+                const ed = diagram.edges.find((x) => x.id === eId);
+                if (ed) dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: ed.id, patch: { style: { ...ed.style, border: val } } } });
+              }
+            }}
+          />
+        </label>
+        <label
+          title="Change Text / Words color of selection"
+          style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, cursor: "pointer", color: "var(--text)" }}
+        >
+          <span>Text</span>
+          <input
+            type="color"
+            style={{ width: 22, height: 22, padding: 0, border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", background: "none" }}
+            value={
+              selectedNodes[0]?.style?.color?.startsWith("#")
+                ? selectedNodes[0].style.color
+                : diagram.edges.find((ed) => selectedEdgeIds.includes(ed.id))?.style?.color?.startsWith("#")
+                ? diagram.edges.find((ed) => selectedEdgeIds.includes(ed.id)).style.color
+                : "#e8eef6"
+            }
+            onChange={(e) => {
+              const val = e.target.value;
+              for (const n of selectedNodes) {
+                dispatch({ action: ACTIONS.UPDATE_NODE, payload: { id: n.id, patch: { style: { ...n.style, color: val } } } });
+              }
+              for (const eId of selectedEdgeIds) {
+                const ed = diagram.edges.find((x) => x.id === eId);
+                if (ed) dispatch({ action: ACTIONS.UPDATE_EDGE, payload: { id: ed.id, patch: { style: { ...ed.style, color: val } } } });
+              }
+            }}
+          />
+        </label>
+      </div>
       <div className="toolbar-group export-menu" style={{ marginLeft: "auto" }}>
         <Tip title="Export" onClick={() => setExportOpen((v) => !v)}>
           Export

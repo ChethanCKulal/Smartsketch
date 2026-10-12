@@ -15,12 +15,22 @@ export const NODE_TYPES = [
   "triangle",
   "hexagon",
   "parallelogram",
+  "cylinder",
+  "document",
+  "star",
+  "cloud",
+  "stickyNote",
+  "callout",
   "text",
+  "arrowRight",
+  "arrowLeft",
+  "arrowUp",
+  "arrowDown",
+  "arrowBoth",
   "process",
   "decision",
   "terminator",
   "io",
-  "document",
   "database",
   "predefinedProcess",
   "class",
@@ -37,6 +47,28 @@ export const NODE_TYPES = [
   "externalEntity",
   "dataFlow",
   "group",
+];
+
+export const UNIVERSAL_SHAPES = [
+  "rectangle",
+  "roundedRectangle",
+  "ellipse",
+  "diamond",
+  "triangle",
+  "hexagon",
+  "parallelogram",
+  "cylinder",
+  "document",
+  "star",
+  "cloud",
+  "stickyNote",
+  "callout",
+  "text",
+  "arrowRight",
+  "arrowLeft",
+  "arrowUp",
+  "arrowDown",
+  "arrowBoth",
 ];
 
 export const DEFAULT_SIZE = { width: 160, height: 72 };
@@ -99,7 +131,7 @@ const CROSS_FAMILY = {
 
 /** Map a foreign node type into a diagram family's vocabulary. */
 export function enforceFamily(nodeType, diagramType) {
-  if (nodeType === "group") return nodeType;
+  if (nodeType === "group" || UNIVERSAL_SHAPES.includes(nodeType)) return nodeType;
   const family = FAMILY_NODE_TYPES[diagramType];
   if (!family) return nodeType;
   if (family.includes(nodeType)) return nodeType;

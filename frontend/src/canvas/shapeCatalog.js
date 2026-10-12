@@ -1,16 +1,33 @@
 export const SHAPE_LIBRARY = [
   {
-    category: "General",
-    family: null, // universal shapes (filtered by the active family's vocabulary)
+    category: "General & Freeform",
+    family: null,
     items: [
       { type: "rectangle", label: "Rectangle" },
       { type: "roundedRectangle", label: "Rounded Rectangle" },
-      { type: "ellipse", label: "Ellipse" },
+      { type: "ellipse", label: "Ellipse / Circle" },
       { type: "diamond", label: "Diamond" },
       { type: "triangle", label: "Triangle" },
       { type: "hexagon", label: "Hexagon" },
       { type: "parallelogram", label: "Parallelogram" },
-      { type: "text", label: "Text" },
+      { type: "cylinder", label: "Cylinder" },
+      { type: "document", label: "Document" },
+      { type: "star", label: "Star" },
+      { type: "cloud", label: "Cloud" },
+      { type: "stickyNote", label: "Sticky Note" },
+      { type: "callout", label: "Callout / Bubble" },
+      { type: "text", label: "Text / Word" },
+    ],
+  },
+  {
+    category: "Arrow Shapes",
+    family: null,
+    items: [
+      { type: "arrowRight", label: "Right Arrow" },
+      { type: "arrowLeft", label: "Left Arrow" },
+      { type: "arrowUp", label: "Up Arrow" },
+      { type: "arrowDown", label: "Down Arrow" },
+      { type: "arrowBoth", label: "Double Arrow" },
     ],
   },
   {

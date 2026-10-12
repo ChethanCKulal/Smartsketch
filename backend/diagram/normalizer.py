@@ -85,6 +85,12 @@ def _bbox_to_position(bbox):
     if not bbox or not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
         return {"x": 80, "y": 80}, {"width": 160, "height": 72}
     x1, y1, x2, y2 = [float(v) for v in bbox[:4]]
+    # If coordinates are normalized in 0..1 range, scale to standard 1000px coordinate space.
+    if 0 <= max(x1, y1, x2, y2) <= 1.0 and max(x1, y1, x2, y2) > 0:
+        x1 *= 1000.0
+        y1 *= 1000.0
+        x2 *= 1000.0
+        y2 *= 1000.0
     return {"x": min(x1, x2), "y": min(y1, y2)}, {
         "width": max(40, abs(x2 - x1)),
         "height": max(28, abs(y2 - y1)),

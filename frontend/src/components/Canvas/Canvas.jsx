@@ -186,6 +186,10 @@ export default function Canvas() {
         snapGrid={[gridSize, gridSize]}
         selectionOnDrag
         panOnDrag={[1, 2]}
+        zoomOnScroll={true}
+        panOnScroll={false}
+        zoomOnPinch={true}
+        preventScrolling={true}
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode="Shift"
         deleteKeyCode={null}
