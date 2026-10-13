@@ -56,6 +56,9 @@ class RecognitionError(Exception):
 # Each entry carries its own generationConfig extras: some models reject
 # thinkingConfig entirely, others only stay fast with thinking disabled.
 FALLBACK_MODELS = (
+    ("gemini-3.5-flash-lite", {}),
+    ("gemini-flash-lite-latest", {}),
+    ("gemini-3.1-flash-lite", {}),
     ("gemini-3.6-flash", {}),
     ("gemini-3.5-flash", {"thinkingConfig": {"thinkingBudget": 0}}),
     ("gemini-flash-latest", {}),
@@ -74,7 +77,7 @@ def recognize_with_gemini(image_bytes, mime_type="image/png", diagram_type="auto
         "maxOutputTokens": 8192,
     }
 
-    configured = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    configured = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
     models = [(configured, {})] + [(m, extra) for m, extra in FALLBACK_MODELS if m != configured]
     last_response = None
     for model, extra_config in models:
@@ -99,16 +102,13 @@ def recognize_with_gemini(image_bytes, mime_type="image/png", diagram_type="auto
             response = requests.post(url, params={"key": api_key}, json=payload, timeout=90)
             # 5xx from Gemini is usually transient overload — retry once.
             if response.status_code >= 500:
-                time.sleep(2)
+                time.sleep(1)
                 response = requests.post(url, params={"key": api_key}, json=payload, timeout=90)
         except requests.RequestException as exc:
-            raise RecognitionError(f"Gemini network failure: {exc}", "network", 503) from exc
+            continue
         last_response = response
 
-        if response.status_code == 429:
-            raise RecognitionError("Gemini rate limit reached.", "rate_limit", 429)
-        # Retired/unknown model: transparently try the next candidate.
-        if response.status_code == 404 or (response.status_code == 400 and "model" in response.text.lower()):
+        if response.status_code == 429 or response.status_code == 503 or response.status_code == 404 or (response.status_code == 400 and "model" in response.text.lower()):
             continue
         if response.status_code >= 400:
             raise RecognitionError(f"Gemini API failure ({response.status_code}).", "api_failure", 502)
