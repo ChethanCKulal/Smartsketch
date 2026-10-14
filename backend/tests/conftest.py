@@ -14,7 +14,7 @@ from app import create_app  # noqa: E402
 def app():
     # Ensure no real network calls are possible during tests.
     os.environ["GEMINI_API_KEY"] = ""
-    os.environ["HUGGINGFACE_API_KEY"] = ""
+    os.environ["GROQ_API_KEY"] = ""
     return create_app()
 
 

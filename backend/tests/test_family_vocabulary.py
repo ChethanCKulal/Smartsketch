@@ -56,7 +56,7 @@ def test_validate_still_passes_after_enforcement():
         ],
         "edges": [{"source": "n1", "target": "n2"}],
     }
-    diagram = to_canonical_diagram(normalize_source_payload(payload, "huggingface", "er"))
+    diagram = to_canonical_diagram(normalize_source_payload(payload, "groq", "er"))
     ok, errors = validate_diagram(diagram)
     assert ok, errors
     assert {n["type"] for n in diagram["nodes"]} <= FAMILY_NODE_TYPES["er"]

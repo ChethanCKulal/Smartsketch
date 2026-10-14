@@ -12,7 +12,7 @@ from diagram.normalizer import merge_members
 
 class WeightStrategy:
     def __init__(self, weights=None):
-        self.weights = weights or {"gemini": 1.0, "huggingface": 0.95}
+        self.weights = weights or {"gemini": 1.0, "groq": 0.95}
 
     def source_weight(self, source):
         return float(self.weights.get(source, 0.8))
@@ -34,7 +34,7 @@ class WeightStrategy:
                 return item_a if len(item_a.get("label", "")) >= len(item_b.get("label", "")) else item_b
             if "gemini" in item_a["sources"]:
                 return item_a
-            if "huggingface" in item_b["sources"]:
+            if "groq" in item_b["sources"]:
                 return item_b
             return item_a if item_a["id"] <= item_b["id"] else item_b
         return item_a if score_a >= score_b else item_b
@@ -150,7 +150,7 @@ def reconcile(source_results, strategy=None):
             {
                 "kind": "diagram_type",
                 "gemini": left.get("diagram_type") if left["source"] == "gemini" else right.get("diagram_type"),
-                "huggingface": left.get("diagram_type") if left["source"] == "huggingface" else right.get("diagram_type"),
+                "groq": left.get("diagram_type") if left["source"] == "groq" else right.get("diagram_type"),
                 "chosen": diagram_type,
             }
         )

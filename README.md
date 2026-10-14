@@ -1,6 +1,6 @@
 # SketchCanvas
 
-AI-assisted software engineering diagram editor. Upload a photograph of a flowchart, UML class diagram, ER diagram, or DFD. Gemini and Hugging Face recognize the drawing independently; a reconciliation engine merges them into canonical JSON; React Flow renders an editable diagram. Manual edits and the rule-based chatbot share one command layer and undo history.
+AI-assisted software engineering diagram editor. Upload a photograph of a flowchart, UML class diagram, ER diagram, or DFD. Gemini and Groq recognize the drawing independently; a reconciliation engine merges them into canonical JSON; React Flow renders an editable diagram. Manual edits and the rule-based chatbot share one command layer and undo history.
 
 ## Run locally
 
@@ -8,7 +8,8 @@ Create `.env` from `.env.example` and set your keys (never commit them):
 
 ```
 GEMINI_API_KEY=...
-HUGGINGFACE_API_KEY=...
+GROQ_API_KEY=...
+GROQ_VISION_MODEL=qwen/qwen3.8-27b
 ```
 
 Backend (Flask, port 5000):
@@ -29,7 +30,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-The canvas editor, shape library, properties, chatbot, undo/redo, and JSON import/export work without API keys. Image recognition requires at least one of Gemini or Hugging Face; if one service fails, the other is still used, and only when both fail does the upload report an error.
+The canvas editor, shape library, properties, chatbot, undo/redo, and JSON import/export work without API keys. Image recognition requires at least one of Gemini or Groq; if one service fails, the other is still used, and only when both fail does the upload report an error.
 
 ### Tests
 
@@ -41,12 +42,12 @@ cd ../frontend
 npm run check:anchors   # edge anchor planning
 ```
 
-58 tests cover the chatbot parser, reconciliation engine, normalizer/schema, family vocabulary enforcement, UML compartments, ER entity rendering, SVG export, and the REST routes (including failure paths with missing keys and invalid images).
+73 tests cover the chatbot parser, reconciliation engine, normalizer/schema, family vocabulary enforcement, UML compartments, ER entity rendering, SVG export, the GroqCloud adapter (model resolution/substitution, image adaptation, error mapping for auth, quota, rate limit, timeout, invalid JSON, and retired models — all with a fake client, no network), and the REST routes (including failure paths with missing keys, invalid images, and a stubbed Groq source carrying a diagram through reconciliation).
 
 ## Architecture
 
 ```
-Recognition (Gemini ∥ Hugging Face, independent)
+Recognition (Gemini ∥ Groq, independent)
         ↓
  Canonical JSON  (single source of truth)
         ↓
@@ -64,6 +65,8 @@ Chatbot / mouse / properties panel
 ```
 
 - **Recognition services** (`backend/recognition/`) each run in their own thread, never overwrite each other, and fall back through a chain of current vision models automatically if a configured model is retired.
+- **GroqCloud** (`backend/recognition/groq_service.py`) is the second source, called through the official `groq` SDK with the image sent as a base64 data URL and JSON mode requested. Groq-specific behaviour is contained here: the provider's response is adapted to the same payload shape Gemini returns, so the normalizer, reconciliation engine and canvas need no provider knowledge. Images under 32×32 px and models that reject image input are reported as input errors, never retried as if they were transient.
+- **Model resolution and preflight.** `GROQ_VISION_MODEL` is checked against the models the account can actually call; if it has been retired (as Groq retired the Llama 4 vision models) the next configured model is used and the substitution is logged and reported. `GET /api/health` returns the resolved model without a network call, and `GET /api/health?probe=1` sends one small image to prove the model accepts image input and returns JSON before you upload anything. Rate limits and billing errors are surfaced as-is, never retried in a loop.
 - **Reconciliation engine** (`backend/recognition/reconciliation_engine.py`) normalizes both payloads, matches nodes by label/type/bbox overlap, combines agreeing confidences (weighted, agreement-boosted), resolves disagreements deterministically via a swappable `WeightStrategy`, and records per-item `sources` and disagreements.
 - **Canonical schema** (`backend/diagram/schema.py`, `frontend/src/schema/canonical.js`) is validated before rendering; every node and edge carries position, size, style, confidence, and source list.
 - **Command layer** (`frontend/src/canvas/commands/`) is the only way canvas state changes — from mouse drags, the properties panel, or chatbot text alike — so undo/redo works uniformly.

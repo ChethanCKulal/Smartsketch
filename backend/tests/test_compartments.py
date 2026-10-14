@@ -155,7 +155,7 @@ def test_reconciliation_keeps_methods_from_both_sources():
         "gemini",
         requested_type="uml",
     )
-    huggingface = normalize_source_payload(
+    groq = normalize_source_payload(
         {
             "diagram_type": "uml",
             "nodes": [
@@ -163,10 +163,10 @@ def test_reconciliation_keeps_methods_from_both_sources():
             ],
             "edges": [],
         },
-        "huggingface",
+        "groq",
         requested_type="uml",
     )
-    merged = reconcile([gemini, huggingface])
+    merged = reconcile([gemini, groq])
     node = merged["nodes"][0]
     assert set(node["methods"]) == {"+ enroll()", "+ drop()"}
     assert set(node["attributes"]) == {"- id", "- name"}

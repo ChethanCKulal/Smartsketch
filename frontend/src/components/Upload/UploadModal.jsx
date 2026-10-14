@@ -184,8 +184,8 @@ export default function UploadModal({ open, onClose, onRecognized }) {
             {sourcesReport && (
               <div>
                 Gemini: {sourcesReport.gemini?.node_count ?? "–"} nodes / {sourcesReport.gemini?.edge_count ?? "–"} edges
-                {" · "}Hugging Face: {sourcesReport.huggingface?.node_count ?? "–"} nodes /{" "}
-                {sourcesReport.huggingface?.edge_count ?? "–"} edges
+                {" · "}Groq: {sourcesReport.groq?.node_count ?? "–"} nodes /{" "}
+                {sourcesReport.groq?.edge_count ?? "–"} edges
               </div>
             )}
             <div>Disagreements: {report.disagreements?.length || 0}</div>

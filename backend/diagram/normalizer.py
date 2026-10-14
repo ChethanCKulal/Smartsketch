@@ -1,3 +1,4 @@
+from .layout import assign_relative_positions, layout_diagram
 from .schema import canonicalize_type, default_style, empty_diagram, enforce_family
 
 EXPLICIT_TYPES = {"flowchart", "uml", "er", "dfd"}
@@ -165,6 +166,11 @@ def normalize_source_payload(payload, source_name, requested_type=None):
             }
         )
 
+    # Placement is derived from the drawing's own arrangement rather than from
+    # the model's raw units: the sources disagree about the coordinate space
+    # (image pixels vs ~0-1000), which used to inflate every box and overlap it.
+    assign_relative_positions(nodes)
+
     id_set = {n["id"] for n in nodes}
     label_map = {n["label"].strip().lower(): n["id"] for n in nodes}
     edges = []
@@ -230,6 +236,8 @@ def to_canonical_diagram(normalized):
                 "label": node["label"],
                 "position": node["position"],
                 "size": node["size"],
+                # Placement detail: consumed (and removed) by layout_diagram below.
+                "rel": node.get("rel"),
                 "style": node.get("style") or default_style(),
                 "attributes": node.get("attributes") or [],
                 "methods": node.get("methods") or [],
@@ -256,23 +264,12 @@ def to_canonical_diagram(normalized):
                     "sources": edge.get("sources") or [],
                 }
             )
-    _spread_if_collapsed(diagram)
     _inline_attributes_to_nodes(diagram)
+    # Every shape is fitted to its text and pushed clear of its neighbours, in
+    # the arrangement that was recognized.
+    layout_diagram(diagram)
     _auto_connect_attributes(diagram)
     return diagram
-
-
-def _spread_if_collapsed(diagram):
-    nodes = diagram.get("nodes") or []
-    if len(nodes) < 2:
-        return
-    xs = [n["position"]["x"] for n in nodes]
-    ys = [n["position"]["y"] for n in nodes]
-    if max(xs) - min(xs) > 40 or max(ys) - min(ys) > 40:
-        return
-    cols = max(1, int(len(nodes) ** 0.5))
-    for index, node in enumerate(nodes):
-        node["position"] = {"x": 80 + (index % cols) * 220, "y": 80 + (index // cols) * 140}
 
 
 def _inline_attributes_to_nodes(diagram):
@@ -294,7 +291,6 @@ def _inline_attributes_to_nodes(diagram):
         if entity["type"] not in ("entity", "weakEntity") or not attrs:
             continue
         entity["attributes"] = []
-        cy = entity["position"]["y"] + entity["size"]["height"] / 2
         kept = []
         for raw_attr in attrs:
             text = str(raw_attr).strip()
@@ -305,19 +301,20 @@ def _inline_attributes_to_nodes(diagram):
             created += 1
         if not kept:
             continue
+        # Ovals sit to the left of their entity, stacked in drawing units; the
+        # layout turns these into canvas pixels and clears them of everything else.
+        entity_rel = entity.get("rel") or {"x": 0.0, "y": 0.0}
         for index, text in enumerate(kept):  # noqa: B007 - index builds the oval id
-            width, height = 110, 42
             attr_id = f"{entity['id']}_a{index + 1}"
+            offset_y = (index - (len(kept) - 1) / 2) * 0.14
             nodes.append(
                 {
                     "id": attr_id,
                     "type": "attribute",
                     "label": text,
-                    "position": {
-                        "x": entity["position"]["x"] - width - 30,
-                        "y": cy - (len(kept) - 1) * 26 + index * 52 - height / 2,
-                    },
-                    "size": {"width": width, "height": height},
+                    "rel": {"x": entity_rel["x"] - 0.22, "y": entity_rel["y"] + offset_y},
+                    "position": {"x": 0.0, "y": 0.0},
+                    "size": {"width": 110, "height": 42},
                     "style": default_style(),
                     "attributes": [],
                     "methods": [],

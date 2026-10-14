@@ -53,7 +53,7 @@ def test_uml_selection_remaps_boxes_to_classes():
         "nodes": [{"id": "n1", "type": "rectangle", "label": "Order", "bbox": [0, 0, 100, 60]}],
         "edges": [],
     }
-    norm = normalize_source_payload(payload, "huggingface", "uml")
+    norm = normalize_source_payload(payload, "groq", "uml")
     assert norm["diagram_type"] == "uml"
     assert norm["nodes"][0]["type"] == "class"
 

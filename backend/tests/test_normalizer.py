@@ -34,7 +34,7 @@ def test_normalize_resolves_labels_as_edge_endpoints():
         ],
         "edges": [{"source": "Student", "target": "Course"}],
     }
-    norm = normalize_source_payload(payload, "huggingface")
+    norm = normalize_source_payload(payload, "groq")
     assert norm["edges"][0]["source"] == "n1"
     assert norm["edges"][0]["target"] == "n2"
 

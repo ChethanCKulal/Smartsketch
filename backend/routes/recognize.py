@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 from utils.images import InvalidImageError, validate_image
 from ocr.ocr_service import inspect_image
 from recognition.gemini_service import RecognitionError, recognize_with_gemini
-from recognition.huggingface_service import HuggingFaceError, recognize_with_huggingface
+from recognition.groq_service import GroqRecognitionError, recognize_with_groq, resolve_vision_model
 from recognition.reconciliation_engine import reconcile
 from diagram.normalizer import normalize_source_payload, to_canonical_diagram
 from diagram.schema import validate_diagram
@@ -31,9 +31,9 @@ def recognize():
         return jsonify({"error": str(exc)}), 400
 
     ocr_meta = inspect_image(image_bytes)
-    gemini_norm, hf_norm = _run_both(image_bytes, mime, hint)
+    gemini_norm, groq_norm, groq_model = _run_both(image_bytes, mime, hint)
 
-    reconciled = reconcile([gemini_norm, hf_norm])
+    reconciled = reconcile([gemini_norm, groq_norm])
     if not reconciled.get("ok"):
         return (
             jsonify(
@@ -48,7 +48,7 @@ def recognize():
                     },
                     "sources": {
                         "gemini": _public_source(gemini_norm),
-                        "huggingface": _public_source(hf_norm),
+                        "groq": _public_source(groq_norm, groq_model),
                     },
                 }
             ),
@@ -87,7 +87,7 @@ def recognize():
             },
             "sources": {
                 "gemini": _public_source(gemini_norm),
-                "huggingface": _public_source(hf_norm),
+                "groq": _public_source(groq_norm, groq_model),
             },
         }
     )
@@ -96,7 +96,7 @@ def recognize():
 def _run_both(image_bytes, mime, hint):
     jobs = {
         "gemini": lambda: recognize_with_gemini(image_bytes, mime, hint),
-        "huggingface": lambda: recognize_with_huggingface(image_bytes, mime, hint),
+        "groq": lambda: recognize_with_groq(image_bytes, mime, hint),
     }
     raw = {}
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -105,7 +105,7 @@ def _run_both(image_bytes, mime, hint):
             name = futures[future]
             try:
                 raw[name] = {"ok": True, "payload": future.result()}
-            except (RecognitionError, HuggingFaceError) as exc:
+            except (RecognitionError, GroqRecognitionError) as exc:
                 raw[name] = {"ok": False, "error": str(exc), "code": exc.code}
             except Exception as exc:
                 raw[name] = {"ok": False, "error": f"{name} failed: {exc}", "code": "unknown"}
@@ -115,15 +115,17 @@ def _run_both(image_bytes, mime, hint):
         if raw.get("gemini", {}).get("ok")
         else {"ok": False, "source": "gemini", "error": raw.get("gemini", {}).get("error", "Gemini failed."), "nodes": [], "edges": []}
     )
-    hf_norm = (
-        normalize_source_payload(raw["huggingface"]["payload"], "huggingface", hint)
-        if raw.get("huggingface", {}).get("ok")
-        else {"ok": False, "source": "huggingface", "error": raw.get("huggingface", {}).get("error", "Hugging Face failed."), "nodes": [], "edges": []}
+    groq_norm = (
+        normalize_source_payload(raw["groq"]["payload"], "groq", hint)
+        if raw.get("groq", {}).get("ok")
+        else {"ok": False, "source": "groq", "error": raw.get("groq", {}).get("error", "Groq failed."), "nodes": [], "edges": []}
     )
-    return gemini_norm, hf_norm
+    # Which Groq model actually served the request, when it succeeded.
+    groq_model = resolve_vision_model().get("model") if raw.get("groq", {}).get("ok") else None
+    return gemini_norm, groq_norm, groq_model
 
 
-def _public_source(norm):
+def _public_source(norm, model=None):
     return {
         "ok": bool(norm.get("ok")),
         "source": norm.get("source"),
@@ -131,4 +133,5 @@ def _public_source(norm):
         "diagram_type": norm.get("diagram_type"),
         "node_count": len(norm.get("nodes") or []),
         "edge_count": len(norm.get("edges") or []),
+        "model": model,
     }
