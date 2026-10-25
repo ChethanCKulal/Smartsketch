@@ -44,12 +44,14 @@ function widest(values, size, bold = false) {
   return values.reduce((best, value) => Math.max(best, textWidth(value, size, bold)), 0);
 }
 
-/** Label box: padding 6px/8px plus the tallest line. */
+/** Label box: padding 6px/8px, a little slack so words do not break, plus the tallest line. */
+const LABEL_SLACK = 8;
+
 function labelBox(node, fontSize, extraWidth = 0) {
   const label = String(node.label ?? " ");
   const lines = Math.max(1, label.split("\n").length);
   return {
-    width: textWidth(label, fontSize, false) + 16 + extraWidth,
+    width: textWidth(label, fontSize, false) + 16 + LABEL_SLACK + extraWidth,
     height: lines * fontSize * 1.35 + 14,
   };
 }
@@ -96,7 +98,7 @@ export function measureNode(node) {
     };
   }
 
-  if (type === "attribute" || type === "usecase") {
+  if (type === "attribute" || type === "usecase" || type === "multivaluedAttribute" || type === "derivedAttribute") {
     // Ellipses lose their width towards the text, hence the generous factor.
     const box = labelBox(node, fontSize);
     return {
@@ -118,6 +120,38 @@ export function measureNode(node) {
     return {
       width: clamp(Math.ceil(box.width), 70, 420),
       height: clamp(Math.ceil(box.height + 14), 48, 260),
+    };
+  }
+
+  if (type === "connector") {
+    // A connector is a small circle: it holds a short reference, not a sentence.
+    const box = labelBox(node, fontSize);
+    const side = clamp(Math.ceil(Math.max(box.width, box.height) + 18), 40, 120);
+    return { width: side, height: side };
+  }
+
+  if (type === "star") {
+    // A star's usable middle is small, so it needs room around its text.
+    const box = labelBox(node, fontSize);
+    return {
+      width: clamp(Math.ceil(box.width * 1.7), 90, 420),
+      height: clamp(Math.ceil(box.height * 1.5), 80, 320),
+    };
+  }
+
+  if (type === "cloud" || type === "callout") {
+    const box = labelBox(node, fontSize);
+    return {
+      width: clamp(Math.ceil(box.width * 1.25), 90, 440),
+      height: clamp(Math.ceil(box.height + (type === "callout" ? 22 : 16)), 50, 260),
+    };
+  }
+
+  if (type === "cylinder") {
+    const box = labelBox(node, fontSize, 14);
+    return {
+      width: clamp(Math.ceil(box.width), 80, 420),
+      height: clamp(Math.ceil(box.height + 20), 56, 260),
     };
   }
 

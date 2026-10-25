@@ -16,10 +16,22 @@ import DiagramEdge from "../../canvas/edges/DiagramEdge";
 import { diagramToFlow } from "../../canvas/adapter";
 import { ACTIONS } from "../../canvas/commands/types";
 import { useDiagramStore } from "../../state/diagramStore";
+import {
+  canvasColor,
+  gridColor,
+  isLightColor,
+  useUiStore,
+} from "../../state/uiStore";
 import { createCanonicalNode } from "../../schema/canonical";
 
 const nodeTypes = { diagramNode: DiagramNode };
 const edgeTypes = { diagramEdge: DiagramEdge };
+
+const COMPARTMENT_SELECTOR = {
+  title: ".class-title",
+  attributes: ".class-attrs",
+  methods: ".class-methods",
+};
 
 export default function Canvas() {
   const diagram = useDiagramStore((s) => s.diagram);
@@ -29,16 +41,33 @@ export default function Canvas() {
   const gridSize = useDiagramStore((s) => s.gridSize);
   const setZoom = useDiagramStore((s) => s.setZoom);
   const editingId = useDiagramStore((s) => s.editingNodeId);
-  const setEditingId = useDiagramStore((s) => s.setEditingNodeId);
+  const editingCompartment = useDiagramStore((s) => s.editingCompartment);
+  const setEditingNode = useDiagramStore((s) => s.setEditingNode);
+  const canvasBackground = useUiStore((s) => s.canvasBackground);
+  const theme = useUiStore((s) => s.theme);
+  const gridVisible = useUiStore((s) => s.gridVisible);
   const { screenToFlowPosition, fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
   const mapped = useMemo(() => diagramToFlow(diagram), [diagram]);
   const [nodes, setNodes] = useState(mapped.nodes);
   const [edges, setEdges] = useState(mapped.edges);
   const [menu, setMenu] = useState(null);
 
+  const background = canvasColor(canvasBackground, theme);
+  const transparent = background === "transparent";
+  const grid = gridColor(canvasBackground, theme);
+
+  // Replacing the canvas elements after an edit must not drop the selection:
+  // otherwise the properties panel closes after the first change, which makes
+  // adjusting a colour or a width impossible.
   useEffect(() => {
-    setNodes(mapped.nodes);
-    setEdges(mapped.edges);
+    setNodes((current) => {
+      const selected = new Set(current.filter((n) => n.selected).map((n) => n.id));
+      return mapped.nodes.map((n) => (selected.has(n.id) ? { ...n, selected: true } : n));
+    });
+    setEdges((current) => {
+      const selected = new Set(current.filter((e) => e.selected).map((e) => e.id));
+      return mapped.edges.map((e) => (selected.has(e.id) ? { ...e, selected: true } : e));
+    });
   }, [mapped]);
 
   const onDrop = useCallback(
@@ -87,8 +116,8 @@ export default function Canvas() {
   }, []);
 
   const onNodeDragStart = useCallback(() => {
-    setEditingId(null);
-  }, []);
+    setEditingNode(null);
+  }, [setEditingNode]);
 
   const onNodeDragStop = useCallback(
     (_e, _node, dragged) => {
@@ -130,19 +159,36 @@ export default function Canvas() {
     [dispatch]
   );
 
-  // Persist an inline label edit through the shared command layer so it joins
-  // the same undo history as chatbot renames.
+  // Persist an inline edit through the shared command layer so it joins the
+  // same undo history as chatbot renames. A UML compartment is written back to
+  // its own field, never flattened into the label.
   const commitEdit = useCallback(
-    (nodeId, label) => {
-      setEditingId(null);
+    (nodeId, compartment, value) => {
+      setEditingNode(null);
       if (!nodeId) return;
       const canonical = useDiagramStore
         .getState()
         .diagram.nodes.find((n) => n.id === nodeId);
-      if (!canonical || canonical.label === label) return;
+      if (!canonical) return;
+
+      if (compartment === "attributes" || compartment === "methods") {
+        const members = String(value)
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (JSON.stringify(members) === JSON.stringify(canonical[compartment] || [])) return;
+        dispatch({
+          action: ACTIONS.UPDATE_NODE,
+          payload: { id: nodeId, patch: { [compartment]: members } },
+        });
+        return;
+      }
+
+      const label = String(value).trim();
+      if (!label || canonical.label === label) return;
       dispatch({ action: ACTIONS.EDIT_TEXT, payload: { id: nodeId, label } });
     },
-    [dispatch, setEditingId]
+    [dispatch, setEditingNode]
   );
 
   useEffect(() => {
@@ -154,7 +200,8 @@ export default function Canvas() {
 
   return (
     <div
-      className="canvas-wrap"
+      className={`canvas-wrap ${transparent ? "canvas-transparent" : ""}`}
+      style={transparent ? undefined : { background }}
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
@@ -194,8 +241,13 @@ export default function Canvas() {
         maxZoom={2.5}
         defaultEdgeOptions={{ type: "diagramEdge" }}
       >
-        <Background gap={gridSize} size={1} color="#243044" />
-        <MiniMap pannable zoomable nodeColor="#4c8dff" maskColor="rgba(10,14,20,0.7)" />
+        {gridVisible && <Background gap={gridSize} size={1} color={grid} />}
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor="#4c8dff"
+          maskColor={isLightColor(background) ? "rgba(248,250,253,0.72)" : "rgba(10,14,20,0.7)"}
+        />
         <Controls showInteractive={false} />
       </ReactFlow>
       {menu && (
@@ -229,8 +281,10 @@ export default function Canvas() {
         </div>
       )}
       {editingId && (
-        <InlineLabelEditor
+        <InlineEditor
+          key={`${editingId}:${editingCompartment || "label"}`}
           editingId={editingId}
+          compartment={editingCompartment}
           onDone={commitEdit}
         />
       )}
@@ -239,32 +293,50 @@ export default function Canvas() {
 }
 
 /**
- * Floats an input over the selected node (double-click to edit).
+ * Floats an editor over the selected node (double-click to edit). A UML class
+ * opens it on the compartment that was double-clicked: the title is one line,
+ * attributes and methods are one member per line.
  * Lives outside React Flow so it never fights the node renderer for focus.
  */
-function InlineLabelEditor({ editingId, onDone }) {
+function InlineEditor({ editingId, compartment, onDone }) {
   const diagram = useDiagramStore((s) => s.diagram);
   const node = diagram.nodes.find((n) => n.id === editingId);
-  const [value, setValue] = useState(node?.label ?? "");
+  const multiLine = compartment === "attributes" || compartment === "methods";
+  const initial = !node
+    ? ""
+    : multiLine
+      ? (node[compartment] || []).join("\n")
+      : node.label ?? "";
+  const [value, setValue] = useState(initial);
+
   if (!node) return null;
+
+  const commit = () => onDone(editingId, compartment, value);
+  const cancel = () => onDone(null, null, "");
+
   return (
     <div
-      className="inline-edit"
+      className={`inline-edit ${multiLine ? "inline-edit-multi" : ""}`}
       style={{
         position: "fixed",
         left: 0,
         top: 0,
       }}
       onMouseDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
       ref={(el) => {
         if (!el || el.dataset.live === "1") return;
         el.dataset.live = "1";
-        // Track the node each frame so the editor sticks to it while zooming.
+        // Track the node (or the exact compartment) each frame so the editor
+        // sticks to it while zooming.
         const tick = () => {
           if (!document.body.contains(el)) return;
           const dom = document.querySelector(`[data-id="${CSS.escape(editingId)}"]`);
-          if (dom) {
-            const r = dom.getBoundingClientRect();
+          const target = dom && compartment
+            ? dom.querySelector(COMPARTMENT_SELECTOR[compartment]) || dom
+            : dom;
+          if (target) {
+            const r = target.getBoundingClientRect();
             el.style.left = `${r.left}px`;
             el.style.top = `${r.top}px`;
             el.style.width = `${r.width}px`;
@@ -275,16 +347,32 @@ function InlineLabelEditor({ editingId, onDone }) {
         requestAnimationFrame(tick);
       }}
     >
-      <input
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => onDone(editingId, value.trim() || node.label)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onDone(editingId, value.trim() || node.label);
-          if (e.key === "Escape") onDone(null, "");
-        }}
-      />
+      {multiLine ? (
+        <textarea
+          autoFocus
+          value={value}
+          spellCheck={false}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") cancel();
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) commit();
+          }}
+        />
+      ) : (
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") cancel();
+          }}
+        />
+      )}
     </div>
   );
 }

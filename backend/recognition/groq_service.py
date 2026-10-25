@@ -68,6 +68,29 @@ Use "rectangle" only when a shape matches no domain notation.
 DIAGRAM_TYPE_HINT
 """
 
+# The flowchart path asks for far less than the other families, and it has to.
+#
+# Its symbol classes, boxes and confidence values come from the trained detector,
+# so the text source is only asked for the words and the relationships — nothing
+# the detector already knows, and nothing the fusion does not read back. That is
+# not just tidiness: a request's *expected* output counts against the account's
+# output-tokens-per-minute budget, and Groq rejects a request whose expectation
+# exceeds the whole per-minute allowance outright ("Request too large for model
+# ... reduce max_tokens"), which no amount of waiting can cure. A full node record
+# per symbol — type, confidence, attributes, methods, ids — pushes a dense drawing
+# over that line, and the upload then loses every label it could have had.
+FLOWCHART_PROMPT = """Read this hand-drawn flowchart photograph and transcribe it.
+Return STRICT JSON only, no markdown, in exactly this shape:
+{
+  "nodes": [{"id": "n1", "label": "<the text written inside one symbol>", "bbox": [x1, y1, x2, y2]}],
+  "edges": [{"source": "<id of the symbol the arrow leaves>", "target": "<id of the symbol the arrow reaches>", "label": "<text written on the arrow, else empty>", "arrow": "forward|backward|both|none"}]
+}
+One node entry per drawn symbol, whatever shape it is. bbox is that symbol's box in the image's own pixels.
+Do not output shape types, confidence values, attributes, methods or anything else.
+A symbol or an arrow you cannot read must be left out rather than invented.
+DIAGRAM_TYPE_HINT
+"""
+
 # Model used when GROQ_VISION_MODEL is unset. Verified image-capable on Groq
 # (supersedes meta-llama/llama-4-*, which Groq retired); it was read from
 # configuration rather than hardcoded into a request, so it can be changed
@@ -83,6 +106,16 @@ FALLBACK_VISION_MODELS = ("qwen/qwen3.8-27b",)
 MIN_SIDE_PX = 32
 
 REQUEST_TIMEOUT = float(os.getenv("GROQ_TIMEOUT_SECONDS", "90"))
+
+# Output budget per request. The generic request needs room for a whole diagram
+# description; the flowchart request needs room for one short record per symbol,
+# and is deliberately kept below the output-tokens-per-minute ceiling a free
+# Groq account enforces (1000/min today), because a request that expects more than
+# that is refused before it is ever run. Overridable for accounts with more room:
+# a dense drawing needs a bigger budget to be transcribed in full.
+DEFAULT_MAX_TOKENS = 8192
+DEFAULT_FLOWCHART_MAX_TOKENS = 1024
+MIN_MAX_TOKENS = 64
 # How long a model listing / capability verdict is trusted before re-checking.
 MODEL_CACHE_TTL = float(os.getenv("GROQ_MODEL_CACHE_TTL", "600"))
 
@@ -140,6 +173,34 @@ def _api_key():
     if not key:
         raise GroqRecognitionError("GROQ_API_KEY is not configured.", "missing_key", 503)
     return key
+
+
+def _int_env(name, fallback):
+    try:
+        return int(str(os.getenv(name, "")).strip() or fallback)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def is_flowchart(diagram_type):
+    return str(diagram_type or "").strip().lower() == "flowchart"
+
+
+def prompt_for(diagram_type):
+    """The prompt this request should send: minimal for a flowchart (see above)."""
+    return FLOWCHART_PROMPT if is_flowchart(diagram_type) else STRICT_PROMPT
+
+
+def output_budget(diagram_type):
+    """max_tokens for this request.
+
+    Only the flowchart request is bounded to fit the account's per-minute output
+    ceiling; the other families keep the larger budget their compartment payloads
+    need, so ER, UML and DFD behaviour is unchanged.
+    """
+    if is_flowchart(diagram_type):
+        return max(MIN_MAX_TOKENS, _int_env("GROQ_FLOWCHART_MAX_TOKENS", DEFAULT_FLOWCHART_MAX_TOKENS))
+    return max(MIN_MAX_TOKENS, _int_env("GROQ_MAX_TOKENS", DEFAULT_MAX_TOKENS))
 
 
 def _client(api_key=None):
@@ -301,7 +362,8 @@ def recognize_with_groq(image_bytes, mime_type="image/png", diagram_type="auto")
     api_key = _api_key()
     _check_min_side(image_bytes)
 
-    prompt = STRICT_PROMPT.replace("DIAGRAM_TYPE_HINT", diagram_hint_block(diagram_type))
+    prompt = prompt_for(diagram_type).replace("DIAGRAM_TYPE_HINT", diagram_hint_block(diagram_type))
+    budget = output_budget(diagram_type)
     data_url = f"data:{mime_type or 'image/png'};base64,{base64.b64encode(image_bytes).decode('ascii')}"
     client = _client(api_key)
 
@@ -322,7 +384,7 @@ def recognize_with_groq(image_bytes, mime_type="image/png", diagram_type="auto")
             completion = client.chat.completions.create(
                 model=model,
                 temperature=0.1,
-                max_tokens=8192,
+                max_tokens=budget,
                 response_format={"type": "json_object"},
                 messages=[
                     {
@@ -344,6 +406,13 @@ def recognize_with_groq(image_bytes, mime_type="image/png", diagram_type="auto")
 
         payload = _parse_completion(completion)
         mark_model_usable(model, True)
+        note = _truncation_note(completion, budget)
+        if note:
+            # The labels it did emit are real readings, so they are kept and the
+            # shortfall is reported; throwing the whole answer away would cost the
+            # user text that was read correctly.
+            payload["text_note"] = note
+            logger.warning("Groq stopped at its output limit: %s", note)
         logger.info("Groq vision model '%s' recognized a %s diagram", model, diagram_type)
         return _adapt_payload(payload)
 
@@ -352,6 +421,76 @@ def recognize_with_groq(image_bytes, mime_type="image/png", diagram_type="auto")
         f"{last_detail or 'unknown'}",
         "api_failure",
         502,
+    )
+
+
+def _truncation_note(completion, budget):
+    """A note when the model ran out of output budget mid-answer, else None.
+
+    `finish_reason` used to be ignored, so a drawing the model could only partly
+    describe came back looking complete: the shapes it never reached kept their
+    placeholder names with nothing saying why.
+    """
+    try:
+        choice = completion.choices[0]
+    except (AttributeError, IndexError, TypeError):
+        return None
+    if getattr(choice, "finish_reason", None) != "length":
+        return None
+    return (
+        f"The text model reached its {budget}-token output limit before it finished, so "
+        "some shapes in this drawing keep a placeholder name. Raise "
+        "GROQ_FLOWCHART_MAX_TOKENS if this account's plan allows a larger answer."
+    )
+
+
+def _retry_after(exc):
+    """Seconds the provider asks us to wait, when it says so."""
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    if not headers:
+        return None
+    try:
+        raw = headers.get("retry-after")
+    except AttributeError:
+        return None
+    if not raw:
+        return None
+    try:
+        return int(float(str(raw).strip()))
+    except ValueError:
+        return None
+
+
+def _rate_limit_failure(exc, message):
+    """Groq answers 429 for two different problems, and they need different advice.
+
+    One is the per-minute window being spent — waiting fixes it. The other is a
+    single request whose *expected* output exceeds the window's entire budget
+    ("Request too large ... reduce max_tokens"); waiting never fixes that, the
+    request has to be made smaller. Until now both arrived as the same generic
+    sentence, and the route logged neither, so a fixable request problem looked
+    like an unlucky moment.
+    """
+    wait = _retry_after(exc)
+    when = f" Wait about {wait}s and try again." if wait else ""
+    if "request too large" in message.lower():
+        return (
+            GroqRecognitionError(
+                "Groq refused this request as too large for the account's output-token "
+                f"limit; retrying it unchanged cannot help.{when} Provider message: {message[:220]}",
+                "output_too_large",
+                429,
+            ),
+            False,
+        )
+    return (
+        GroqRecognitionError(
+            "Groq rate limit reached: the account's per-minute window is spent, which says "
+            f"nothing about the image.{when} Provider message: {message[:220]}",
+            "rate_limit",
+            429,
+        ),
+        False,
     )
 
 
@@ -374,14 +513,7 @@ def classify_error(exc, model):
             True,
         )
     if isinstance(exc, RateLimitError):
-        return (
-            GroqRecognitionError(
-                "Groq rate limit or quota reached. Wait for the window to reset or check the plan limits.",
-                "rate_limit",
-                429,
-            ),
-            False,
-        )
+        return _rate_limit_failure(exc, message)
     if status == 402:
         return (
             GroqRecognitionError(
@@ -409,6 +541,19 @@ def classify_error(exc, model):
                     f"Groq model '{model}' does not accept image input.", "not_vision_capable", 400
                 ),
                 True,
+            )
+        if "failed to generate json" in lower:
+            # Structured-output mode ran out of room to finish a valid object; the
+            # model is usable, the answer just did not fit. Retrying the same model
+            # would waste the window, so this is reported as it is.
+            return (
+                GroqRecognitionError(
+                    "Groq could not produce valid JSON for this image, which usually means "
+                    f"the answer was cut off before it was complete: {message[:200]}",
+                    "invalid_json",
+                    502,
+                ),
+                False,
             )
         if "at least 32 pixels" in lower:
             return (

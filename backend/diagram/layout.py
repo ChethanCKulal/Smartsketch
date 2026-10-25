@@ -444,6 +444,10 @@ def layout_diagram(diagram, gap=GAP, margin=MARGIN, max_expansions=40, sweeps=60
             box["y"] = centre_y + (box["y"] - centre_y) * 1.08
         _keep_inside(boxes, margin)
 
+    # A single translation of the finished arrangement: nothing is left hanging
+    # outside the top-left margin, and because every box moves by the same
+    # amount, no separation is undone.
+    _keep_inside(boxes, margin)
     for node, box in zip(nodes, boxes):
         node["position"] = {"x": round(box["x"]), "y": round(box["y"])}
         node.pop("rel", None)

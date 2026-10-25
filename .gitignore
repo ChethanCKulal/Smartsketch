@@ -7,4 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+# Trained model weights: copy best.pt into place, never commit it.
+backend/models/**/*.pt
+.logs/
 frontend/package-lock.json

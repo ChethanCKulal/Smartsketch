@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { DIAGRAM_TYPES } from "../../schema/canonical";
 import { ACTIONS } from "../../canvas/commands/types";
 import { useDiagramStore } from "../../state/diagramStore";
-import { exportJson, exportPng, exportSvg, openJsonFile } from "../Export/exportDiagram";
+import { CANVAS_BACKGROUNDS, useUiStore } from "../../state/uiStore";
+import { exportPng, exportSvg, openJsonFile } from "../Export/exportDiagram";
 
 function Tip({ title, children, onClick, disabled, active }) {
   return (
@@ -12,7 +13,7 @@ function Tip({ title, children, onClick, disabled, active }) {
   );
 }
 
-export default function Toolbar({ onUpload, onOpenFile }) {
+export default function Toolbar({ onUpload, onOpenFile, onNew }) {
   const diagram = useDiagramStore((s) => s.diagram);
   const dispatch = useDiagramStore((s) => s.dispatch);
   const undo = useDiagramStore((s) => s.undo);
@@ -24,8 +25,15 @@ export default function Toolbar({ onUpload, onOpenFile }) {
   const setClipboard = useDiagramStore((s) => s.setClipboard);
   const snapToGrid = useDiagramStore((s) => s.snapToGrid);
   const setSnap = useDiagramStore((s) => s.setSnap);
-  const newDiagram = useDiagramStore((s) => s.newDiagram);
+  const saveDocument = useDiagramStore((s) => s.saveDocument);
+  const theme = useUiStore((s) => s.theme);
+  const toggleTheme = useUiStore((s) => s.toggleTheme);
+  const canvasBackground = useUiStore((s) => s.canvasBackground);
+  const setCanvasBackground = useUiStore((s) => s.setCanvasBackground);
+  const gridVisible = useUiStore((s) => s.gridVisible);
+  const setGridVisible = useUiStore((s) => s.setGridVisible);
   const [exportOpen, setExportOpen] = useState(false);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const fileRef = useRef();
 
   const selectedNodes = diagram.nodes.filter((n) => selectedIds.includes(n.id));
@@ -48,6 +56,9 @@ export default function Toolbar({ onUpload, onOpenFile }) {
     dispatch({ action: ACTIONS.PASTE, payload: clipboard });
   };
 
+  const nextTheme = theme === "dark" ? "light" : "dark";
+  const customColor = /^#[0-9a-f]{6}$/i.test(canvasBackground) ? canvasBackground : "#101722";
+
   return (
     <header className="top-toolbar">
       <div className="brand">
@@ -55,13 +66,13 @@ export default function Toolbar({ onUpload, onOpenFile }) {
         SketchCanvas
       </div>
       <div className="toolbar-group">
-        <Tip title="New diagram" onClick={() => newDiagram(diagram.diagram_type)}>
+        <Tip title="New document" onClick={onNew}>
           New
         </Tip>
         <Tip title="Open JSON" onClick={() => fileRef.current?.click()}>
           Open
         </Tip>
-        <Tip title="Save JSON" onClick={exportJson}>
+        <Tip title="Save the document (all pages) as JSON" onClick={saveDocument}>
           Save
         </Tip>
         <Tip title="Upload photograph" onClick={onUpload}>
@@ -174,39 +185,140 @@ export default function Toolbar({ onUpload, onOpenFile }) {
           ))}
         </select>
       </div>
-      <div className="toolbar-group export-menu" style={{ marginLeft: "auto" }}>
-        <Tip title="Export" onClick={() => setExportOpen((v) => !v)}>
-          Export
-        </Tip>
-        {exportOpen && (
-          <div className="export-pop">
-            <button
-              onClick={async () => {
-                await exportPng();
-                setExportOpen(false);
-              }}
-            >
-              PNG
-            </button>
-            <button
-              onClick={async () => {
-                await exportSvg();
-                setExportOpen(false);
-              }}
-            >
-              SVG
-            </button>
-            <button
-              onClick={() => {
-                exportJson();
-                setExportOpen(false);
-              }}
-            >
-              JSON
-            </button>
-          </div>
-        )}
+
+      <div className="toolbar-group toolbar-end">
+        <div className="export-menu">
+          <Tip
+            title="Canvas background and grid"
+            active={canvasOpen}
+            onClick={() => {
+              setCanvasOpen((v) => !v);
+              setExportOpen(false);
+            }}
+          >
+            Canvas
+          </Tip>
+          {canvasOpen && (
+            <div className="export-pop canvas-pop">
+              <div className="pop-title">Canvas background</div>
+              {CANVAS_BACKGROUNDS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={canvasBackground === option.id ? "active" : ""}
+                  onClick={() => setCanvasBackground(option.id)}
+                >
+                  <span className={`bg-dot ${option.id}`} aria-hidden="true" />
+                  {option.label}
+                </button>
+              ))}
+              <label className="pop-field">
+                Custom
+                <input
+                  type="color"
+                  value={customColor}
+                  aria-label="Custom canvas background"
+                  onChange={(e) => setCanvasBackground(e.target.value)}
+                />
+              </label>
+              <label className="pop-check">
+                <input
+                  type="checkbox"
+                  checked={gridVisible}
+                  onChange={(e) => setGridVisible(e.target.checked)}
+                />
+                Show grid
+              </label>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="tb-btn theme-toggle"
+          title={`Switch to ${nextTheme} theme`}
+          aria-label={`Switch to ${nextTheme} theme`}
+          onClick={toggleTheme}
+        >
+          {nextTheme === "light" ? <SunIcon /> : <MoonIcon />}
+        </button>
+
+        <div className="export-menu">
+          <Tip
+            title="Export"
+            active={exportOpen}
+            onClick={() => {
+              setExportOpen((v) => !v);
+              setCanvasOpen(false);
+            }}
+          >
+            Export
+          </Tip>
+          {exportOpen && (
+            <div className="export-pop">
+              <button
+                title="Export the current page as a PNG image"
+                onClick={async () => {
+                  await exportPng();
+                  setExportOpen(false);
+                }}
+              >
+                PNG — this page
+              </button>
+              <button
+                title="Export the current page as an SVG image"
+                onClick={async () => {
+                  await exportSvg();
+                  setExportOpen(false);
+                }}
+              >
+                SVG — this page
+              </button>
+              <button
+                title="Save the whole document, including every page, as JSON"
+                onClick={() => {
+                  saveDocument();
+                  setExportOpen(false);
+                }}
+              >
+                JSON — all pages
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <line x1="12" y1="2.2" x2="12" y2="4.6" />
+        <line x1="12" y1="19.4" x2="12" y2="21.8" />
+        <line x1="2.2" y1="12" x2="4.6" y2="12" />
+        <line x1="19.4" y1="12" x2="21.8" y2="12" />
+        <line x1="5.1" y1="5.1" x2="6.8" y2="6.8" />
+        <line x1="17.2" y1="17.2" x2="18.9" y2="18.9" />
+        <line x1="5.1" y1="18.9" x2="6.8" y2="17.2" />
+        <line x1="17.2" y1="6.8" x2="18.9" y2="5.1" />
+      </g>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

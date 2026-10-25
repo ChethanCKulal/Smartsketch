@@ -10,6 +10,12 @@ export function useKeyboardShortcuts() {
       const typing = tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable;
       const store = useDiagramStore.getState();
 
+      // Typing owns the keyboard, including the browser's own undo inside a text
+      // field: no canvas shortcut may fire while text is being entered.
+      if (typing || store.editingNodeId) return;
+      // A dialog owns the keyboard while it is open.
+      if (document.querySelector('[role="dialog"]')) return;
+
       if (meta && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         store.undo();
@@ -20,7 +26,6 @@ export function useKeyboardShortcuts() {
         store.redo();
         return;
       }
-      if (typing) return;
       if (meta && e.key.toLowerCase() === "c") {
         e.preventDefault();
         copySelection(store);
@@ -32,10 +37,6 @@ export function useKeyboardShortcuts() {
           action: ACTIONS.DELETE_SELECTION,
           payload: { ids: [...store.selectedIds, ...store.selectedEdgeIds] },
         });
-      }
-      if (meta && e.key.toLowerCase() === "v") {
-        e.preventDefault();
-        if (store.clipboard.nodes?.length) store.dispatch({ action: ACTIONS.PASTE, payload: store.clipboard });
       }
       if (meta && e.key.toLowerCase() === "a") {
         e.preventDefault();

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 import os
 
 from recognition.groq_service import probe_vision_support, resolve_vision_model
+from recognition.yolo_service import model_info as yolo_model_info
 
 health_bp = Blueprint("health", __name__)
 
@@ -23,5 +24,7 @@ def health():
             "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
             "groq_configured": bool(os.getenv("GROQ_API_KEY")),
             "groq": groq,
+            # Reported without loading the model, so a health check stays cheap.
+            "yolo": yolo_model_info(),
         }
     )

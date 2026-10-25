@@ -1,12 +1,14 @@
-import { ACTIONS } from "./types";
+import { ACTIONS } from "./types.js";
 import {
   createCanonicalEdge,
   createCanonicalNode,
   emptyDiagram,
   enforceFamily,
+  isUniversalShape,
   validateDiagram,
-} from "../../schema/canonical";
-import { measureNode } from "../autosize";
+} from "../../schema/canonical.js";
+import { measureNode } from "../autosize.js";
+import { arrowFromMarkers } from "../connectors.js";
 
 /**
  * Fit a node's box to the text it holds.
@@ -46,13 +48,24 @@ export function applyCommand(diagram, command) {
   // introduces or retypes a node passes through the family filter.
   if (next.diagram_type) {
     if (payload.type && action !== ACTIONS.LOAD_DIAGRAM) {
-      payload = { ...payload, type: enforceFamily(payload.type, next.diagram_type) };
+      // A general shape (cloud, sticky note, cylinder …) is legal in every
+      // family; only notation-specific shapes are filtered.
+      payload = {
+        ...payload,
+        type: isUniversalShape(payload.type)
+          ? payload.type
+          : enforceFamily(payload.type, next.diagram_type),
+      };
     }
     if (action === ACTIONS.SET_DIAGRAM_TYPE && payload.diagram_type !== next.diagram_type) {
-      // Retyping the whole diagram migrates every node into the new family.
+      // Retyping the whole diagram migrates notation shapes into the new family
+      // and leaves general shapes alone.
       next.nodes = next.nodes.map((n) => ({
         ...n,
-        type: n.type === "group" ? n.type : enforceFamily(n.type, payload.diagram_type),
+        type:
+          n.type === "group" || isUniversalShape(n.type)
+            ? n.type
+            : enforceFamily(n.type, payload.diagram_type),
       }));
     }
   }
@@ -153,17 +166,49 @@ export function applyCommand(diagram, command) {
     case ACTIONS.UPDATE_NODE: {
       const node = next.nodes.find((n) => n.id === payload.id);
       if (!node) return { ok: false, diagram, error: "Node not found." };
-      Object.assign(node, payload.patch || {});
-      if (payload.patch?.style) node.style = { ...node.style, ...payload.patch.style };
-      if (payload.patch?.position) node.position = { ...node.position, ...payload.patch.position };
+      const patch = payload.patch || {};
+      const mergedStyle = patch.style ? { ...node.style, ...patch.style } : null;
+      Object.assign(node, patch);
+      if (mergedStyle) node.style = mergedStyle;
+      if (patch.position) node.position = { ...node.position, ...patch.position };
       if (payload.patch?.size) {
         node.size = { ...node.size, ...payload.patch.size };
         node.autoSize = false; // an explicit size wins over fitting to text
-      } else if (["label", "attributes", "methods"].some((key) => key in (payload.patch || {}))) {
+      } else if (["label", "attributes", "methods", "type"].some((key) => key in patch)) {
+        // Retyping can change what the box has to hold (a class gains
+        // compartments, an interface gains a prefix), so an auto-sized shape is
+        // measured again. A shape the user resized by hand keeps its size.
         fitToText(node);
       }
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next };
+    }
+    case ACTIONS.UPDATE_NODES: {
+      // One command for a style applied to a whole selection: a single undo
+      // step, and no shape outside the selection is touched.
+      const ids = new Set(payload.ids || []);
+      const patch = payload.patch || {};
+      let changed = 0;
+      for (const node of next.nodes) {
+        if (!ids.has(node.id) || node.locked) continue;
+        // Merge before assigning: assigning the patch first would replace the
+        // whole style object and drop every key the patch does not mention.
+        const merged = patch.style ? { ...node.style, ...patch.style } : null;
+        Object.assign(node, patch);
+        if (merged) node.style = merged;
+        if (patch.size) {
+          node.size = { ...node.size, ...patch.size };
+          node.autoSize = false;
+        }
+        changed += 1;
+      }
+      if (!changed) return { ok: false, diagram, error: "No editable shapes selected." };
+      next.meta.updatedAt = new Date().toISOString();
+      return {
+        ok: true,
+        diagram: next,
+        message: `Updated ${changed} shape${changed === 1 ? "" : "s"}.`,
+      };
     }
     case ACTIONS.CONNECT: {
       const source = payload.sourceId
@@ -222,8 +267,15 @@ export function applyCommand(diagram, command) {
     case ACTIONS.UPDATE_EDGE: {
       const edge = next.edges.find((e) => e.id === payload.id);
       if (!edge) return { ok: false, diagram, error: "Edge not found." };
-      Object.assign(edge, payload.patch || {});
-      if (payload.patch?.style) edge.style = { ...edge.style, ...payload.patch.style };
+      const patch = payload.patch || {};
+      const mergedStyle = patch.style ? { ...edge.style, ...patch.style } : null;
+      Object.assign(edge, patch);
+      if (mergedStyle) edge.style = mergedStyle;
+      if ("startMarker" in patch || "endMarker" in patch) {
+        // Keep the legacy field honest so the backend SVG export draws the same
+        // ends the canvas does.
+        edge.arrow = arrowFromMarkers(edge.startMarker, edge.endMarker);
+      }
       next.meta.updatedAt = new Date().toISOString();
       return { ok: true, diagram: next };
     }
@@ -311,9 +363,13 @@ export function applyCommand(diagram, command) {
       const loaded = {
         ...emptyDiagram(payload.diagram.diagram_type),
         ...payload.diagram,
-        nodes: (payload.diagram.nodes || []).map((n) =>
-          fitToText(createCanonicalNode({ ...n, type: enforceFamily(n.type, payload.diagram.diagram_type) }))
-        ),
+        nodes: (payload.diagram.nodes || []).map((n) => {
+          // Recognized shapes are pulled into the diagram's vocabulary; a shape
+          // the user placed deliberately keeps the type they chose.
+          const recognized = (n.sources?.length || 0) > 0 || typeof n.confidence === "number";
+          const type = recognized ? enforceFamily(n.type, payload.diagram.diagram_type) : n.type;
+          return fitToText(createCanonicalNode({ ...n, type }));
+        }),
         edges: (payload.diagram.edges || []).filter((e) => e.source && e.target).map((e) => createCanonicalEdge(e)),
       };
       loaded.meta = { ...emptyDiagram().meta, ...(payload.diagram.meta || {}) };

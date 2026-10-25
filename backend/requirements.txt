@@ -5,3 +5,7 @@ requests==2.32.3
 groq==1.7.0
 Pillow==12.3.0
 gunicorn==23.0.0
+ultralytics==8.4.175
+# torch and torchvision are deliberately NOT pinned here: install the CUDA build
+# first (README → Flowchart detection) and this unpinned requirement keeps it,
+# instead of swapping a CUDA build for the CPU-only wheel from PyPI.

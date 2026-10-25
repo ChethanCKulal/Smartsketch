@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check:anchors": "node scripts/check-anchors.mjs"
+    "check:anchors": "node scripts/check-anchors.mjs",
+    "check:shapes": "node scripts/check-shapes.mjs",
+    "check:document": "node scripts/check-document.mjs",
+    "check": "npm run check:anchors && npm run check:shapes && npm run check:document"
   },
   "dependencies": {
     "@xyflow/react": "^12.6.0",

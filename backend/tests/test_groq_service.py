@@ -283,6 +283,158 @@ def test_invalid_json_body_is_reported(monkeypatch, _key):
     assert excinfo.value.code == "invalid_json"
 
 
+# --- the flowchart request, and the two shapes of a Groq 429 ------------------
+
+
+def _completion_with_reason(content, finish_reason):
+    completion = _completion(content)
+    completion.choices[0].finish_reason = finish_reason
+    return completion
+
+
+def _provider_error_with_headers(cls, status, message, headers=None):
+    request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    body = {"error": {"message": message}}
+    response = httpx.Response(status, request=request, json=body, headers=headers or {})
+    return cls(message, response=response, body=body)
+
+
+def test_a_flowchart_asks_only_for_labels_and_boxes(monkeypatch, _key):
+    """The flowchart request carries only what the fusion reads back.
+
+    Shape classes, boxes and confidences come from the trained detector, so asking
+    the model to echo them back inflated the expected output for nothing — and a
+    request whose expected output exceeds the account's whole per-minute budget is
+    refused outright.
+    """
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    monkeypatch.delenv("GROQ_FLOWCHART_MAX_TOKENS", raising=False)
+    client = _use(
+        monkeypatch,
+        _FakeClient(["qwen/qwen3.8-27b"], [_completion('{"nodes": [], "edges": []}')]),
+    )
+    recognize_with_groq(_png(), "image/png", "flowchart")
+    call = client.chat.calls[0]
+    prompt = call["messages"][0]["content"][0]["text"]
+    assert '"label"' in prompt and '"bbox"' in prompt
+    assert '"attributes"' not in prompt and '"methods"' not in prompt
+    assert '"confidence"' not in prompt
+    # The budget fits inside a free account's enforced per-minute output ceiling.
+    assert call["max_tokens"] == groq_service.DEFAULT_FLOWCHART_MAX_TOKENS
+    assert call["max_tokens"] <= 1024
+
+
+def test_other_families_keep_the_full_prompt_and_the_larger_budget(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    client = _use(monkeypatch, _FakeClient(["qwen/qwen3.8-27b"], [_completion('{"nodes": []}')]))
+    recognize_with_groq(_png(), "image/png", "uml")
+    call = client.chat.calls[0]
+    prompt = call["messages"][0]["content"][0]["text"]
+    assert '"attributes"' in prompt and '"methods"' in prompt
+    assert call["max_tokens"] == groq_service.DEFAULT_MAX_TOKENS
+
+
+def test_the_flowchart_budget_is_configurable(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    monkeypatch.setenv("GROQ_FLOWCHART_MAX_TOKENS", "4096")
+    client = _use(monkeypatch, _FakeClient(["qwen/qwen3.8-27b"], [_completion('{"nodes": []}')]))
+    recognize_with_groq(_png(), "image/png", "flowchart")
+    assert client.chat.calls[0]["max_tokens"] == 4096
+
+
+def test_a_spent_per_minute_window_reports_when_to_try_again(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    detail = (
+        "Rate limit reached for model `qwen/qwen3.8-27b` in organization org_01abc23 on output tokens "
+        "per minute (OTPM): Limit 1000, Used 660, Requested 991. Please try again in 39.06s."
+    )
+    _use(
+        monkeypatch,
+        _FakeClient(
+            ["qwen/qwen3.8-27b"],
+            [_provider_error_with_headers(RateLimitError, 429, detail, {"retry-after": "40"})],
+        ),
+    )
+    with pytest.raises(GroqRecognitionError) as excinfo:
+        recognize_with_groq(_png(), "image/png", "flowchart")
+    assert excinfo.value.code == "rate_limit"
+    assert excinfo.value.status == 429
+    # The wait the provider asked for, and that the image is not at fault.
+    assert "40s" in str(excinfo.value)
+    assert "per-minute window" in str(excinfo.value)
+    assert "org_01abc23" not in str(excinfo.value)
+
+
+def test_a_request_too_large_for_the_output_ceiling_is_not_reported_as_a_moment_to_wait_for(
+    monkeypatch, _key
+):
+    """Groq's other 429: the request's expected output exceeds the whole budget.
+
+    Waiting never fixes this one, so it must not be reported as a rate limit that
+    clears by itself.
+    """
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    detail = (
+        "Request too large for model `qwen/qwen3.8-27b` in organization org_01abc23 on output tokens "
+        "per minute (OTPM): Limit 1000, Requested 1224. The request's expected output tokens exceed "
+        "the enforced limit; reduce max_tokens (or the request's expected output) and try again."
+    )
+    client = _use(
+        monkeypatch,
+        _FakeClient(["qwen/qwen3.8-27b"], [_provider_error(RateLimitError, 429, detail)]),
+    )
+    with pytest.raises(GroqRecognitionError) as excinfo:
+        recognize_with_groq(_png(), "image/png", "flowchart")
+    assert excinfo.value.code == "output_too_large"
+    assert "cannot help" in str(excinfo.value)
+    assert "reduce max_tokens" in str(excinfo.value)
+    assert "org_01abc23" not in str(excinfo.value)
+    assert len(client.chat.calls) == 1  # retrying the same request is pointless
+
+
+def test_a_truncated_answer_keeps_the_labels_it_did_read(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    payload = {"nodes": [{"id": "n1", "label": "Start", "bbox": [0, 0, 40, 20]}], "edges": []}
+    _use(
+        monkeypatch,
+        _FakeClient(
+            ["qwen/qwen3.8-27b"],
+            [_completion_with_reason(json.dumps(payload), "length")],
+        ),
+    )
+    result = recognize_with_groq(_png(), "image/png", "flowchart")
+    assert [n["label"] for n in result["nodes"]] == ["Start"]
+    assert "output limit" in result["text_note"]
+    assert "GROQ_FLOWCHART_MAX_TOKENS" in result["text_note"]
+
+
+def test_a_complete_answer_carries_no_note(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    payload = {"nodes": [{"id": "n1", "label": "Start", "bbox": [0, 0, 40, 20]}], "edges": []}
+    _use(
+        monkeypatch,
+        _FakeClient(["qwen/qwen3.8-27b"], [_completion_with_reason(json.dumps(payload), "stop")]),
+    )
+    result = recognize_with_groq(_png(), "image/png", "flowchart")
+    assert "text_note" not in result
+
+
+def test_a_cut_off_structured_answer_is_reported_as_json_not_as_an_unusable_model(monkeypatch, _key):
+    monkeypatch.setenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+    client = _use(
+        monkeypatch,
+        _FakeClient(
+            ["qwen/qwen3.8-27b"],
+            [_provider_error(BadRequestError, 400, "Failed to generate JSON. Please adjust your prompt.")],
+        ),
+    )
+    with pytest.raises(GroqRecognitionError) as excinfo:
+        recognize_with_groq(_png(), "image/png", "flowchart")
+    assert excinfo.value.code == "invalid_json"
+    assert "cut off" in str(excinfo.value)
+    assert len(client.chat.calls) == 1  # the model is fine; the answer did not fit
+
+
 def test_retired_model_falls_through_to_the_next_candidate(monkeypatch, _key):
     monkeypatch.setenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
     monkeypatch.setenv("GROQ_VISION_MODELS", "qwen/qwen3.8-27b")

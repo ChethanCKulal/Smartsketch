@@ -1,5 +1,16 @@
 /** Canonical diagram JSON — single source of truth for canvas, export, and recognition. */
 
+import {
+  DEFAULT_END_MARKER,
+  DEFAULT_MARKER_SIZE,
+  DEFAULT_ROUTING,
+  DEFAULT_START_MARKER,
+  MAX_MARKER_SIZE,
+  MIN_MARKER_SIZE,
+  arrowFromMarkers,
+  markersFromArrow,
+} from "../canvas/connectors.js";
+
 export const DIAGRAM_TYPES = [
   { id: "flowchart", label: "Flowchart" },
   { id: "uml", label: "UML Class Diagram" },
@@ -15,6 +26,16 @@ export const NODE_TYPES = [
   "triangle",
   "hexagon",
   "parallelogram",
+  "invertedTriangle",
+  "trapezoid",
+  "pentagon",
+  "octagon",
+  "cylinder",
+  "cloud",
+  "star",
+  "callout",
+  "stickyNote",
+  "multipleDocument",
   "text",
   "process",
   "decision",
@@ -23,6 +44,10 @@ export const NODE_TYPES = [
   "document",
   "database",
   "predefinedProcess",
+  "manualOperation",
+  "preparation",
+  "connector",
+  "offPageConnector",
   "class",
   "interface",
   "package",
@@ -32,6 +57,8 @@ export const NODE_TYPES = [
   "attribute",
   "relationship",
   "weakEntity",
+  "multivaluedAttribute",
+  "derivedAttribute",
   "dfdProcess",
   "dataStore",
   "externalEntity",
@@ -42,13 +69,70 @@ export const NODE_TYPES = [
 export const DEFAULT_SIZE = { width: 160, height: 72 };
 
 /**
+ * Shapes that belong to no single notation: they are offered by every diagram
+ * family and keep their type wherever the user places them.
+ *
+ * Recognition output is unaffected: nodes that arrive with provenance are
+ * still normalized with the strict `enforceFamily` filter on load, so a vision
+ * model's generic "rectangle" becomes an entity in an ER diagram exactly as
+ * before.
+ */
+export const GENERAL_NODE_TYPES = [
+  "text",
+  "rectangle",
+  "roundedRectangle",
+  "ellipse",
+  "diamond",
+  "triangle",
+  "hexagon",
+  "parallelogram",
+  "invertedTriangle",
+  "trapezoid",
+  "pentagon",
+  "octagon",
+  "cylinder",
+  "cloud",
+  "star",
+  "callout",
+  "stickyNote",
+  "multipleDocument",
+];
+
+/** The shape types a family offers: its own notation plus the general shapes. */
+export function shapesForFamily(diagramType) {
+  const family = FAMILY_NODE_TYPES[diagramType] || NODE_TYPES;
+  return [...family, ...GENERAL_NODE_TYPES.filter((t) => !family.includes(t))];
+}
+
+/**
  * The complete shape vocabulary of each diagram family. Nothing outside this
  * set may appear on the canvas while that family is active — an ER diagram
  * never shows flowchart shapes and vice versa.
  */
 export const FAMILY_NODE_TYPES = {
-  flowchart: ["process", "decision", "terminator", "io", "document", "database", "predefinedProcess", "text"],
-  er: ["entity", "attribute", "relationship", "weakEntity", "text"],
+  flowchart: [
+    "process",
+    "decision",
+    "terminator",
+    "io",
+    "document",
+    "database",
+    "predefinedProcess",
+    "manualOperation",
+    "preparation",
+    "connector",
+    "offPageConnector",
+    "text",
+  ],
+  er: [
+    "entity",
+    "attribute",
+    "relationship",
+    "weakEntity",
+    "multivaluedAttribute",
+    "derivedAttribute",
+    "text",
+  ],
   uml: ["class", "interface", "package", "actor", "usecase", "text"],
   dfd: ["dfdProcess", "dataStore", "externalEntity", "dataFlow", "text"],
 };
@@ -79,11 +163,17 @@ const CROSS_FAMILY = {
   document: { er: "entity", uml: "class", dfd: "externalEntity" },
   database: { er: "entity", uml: "class", dfd: "dataStore" },
   predefinedProcess: { er: "entity", uml: "class", dfd: "dfdProcess" },
+  manualOperation: { er: "entity", uml: "class", dfd: "dfdProcess" },
+  preparation: { er: "entity", uml: "class", dfd: "dfdProcess" },
+  connector: { er: "attribute", uml: "usecase", dfd: "dfdProcess" },
+  offPageConnector: { er: "entity", uml: "class", dfd: "externalEntity" },
   // er → others
   entity: { flowchart: "process", uml: "class", dfd: "externalEntity" },
   attribute: { flowchart: "io", uml: "usecase", dfd: "dfdProcess" },
   relationship: { flowchart: "decision", uml: "class", dfd: "dfdProcess" },
   weakEntity: { flowchart: "process", uml: "class", dfd: "externalEntity" },
+  multivaluedAttribute: { flowchart: "io", uml: "usecase", dfd: "dfdProcess" },
+  derivedAttribute: { flowchart: "io", uml: "usecase", dfd: "dfdProcess" },
   // uml → others
   class: { flowchart: "process", er: "entity", dfd: "externalEntity" },
   interface: { flowchart: "process", er: "entity", dfd: "externalEntity" },
@@ -97,7 +187,18 @@ const CROSS_FAMILY = {
   dataFlow: { flowchart: "io", er: "relationship", uml: "class" },
 };
 
-/** Map a foreign node type into a diagram family's vocabulary. */
+/** A general shape is offered by every family and is never remapped. */
+export function isUniversalShape(nodeType) {
+  return GENERAL_NODE_TYPES.includes(nodeType);
+}
+
+/**
+ * Map a foreign node type into a diagram family's vocabulary.
+ *
+ * This is the strict family filter: recognized shapes are normalized with it,
+ * so a vision model's generic "rectangle" still becomes an entity in an ER
+ * diagram. User-authored general shapes bypass it via `isUniversalShape`.
+ */
 export function enforceFamily(nodeType, diagramType) {
   if (nodeType === "group") return nodeType;
   const family = FAMILY_NODE_TYPES[diagramType];
@@ -169,6 +270,11 @@ export function createCanonicalNode(partial = {}) {
 
 export function createCanonicalEdge(partial = {}) {
   const style = { ...defaultStyle(), ...(partial.style || {}) };
+  // Diagrams saved before end markers existed only carry `arrow`. Reading it as
+  // the marker pair keeps every old connector looking exactly as it did.
+  const legacy = markersFromArrow(partial.arrow || style.arrow);
+  const startMarker = partial.startMarker || legacy.startMarker || DEFAULT_START_MARKER;
+  const endMarker = partial.endMarker || legacy.endMarker || DEFAULT_END_MARKER;
   return {
     id: partial.id || `edge_${crypto.randomUUID().slice(0, 8)}`,
     source: partial.source,
@@ -176,12 +282,28 @@ export function createCanonicalEdge(partial = {}) {
     sourceHandle: partial.sourceHandle || null,
     targetHandle: partial.targetHandle || null,
     label: partial.label ?? "",
-    arrow: partial.arrow || style.arrow || "forward",
+    // How the line runs between its two anchors.
+    routing: partial.routing || DEFAULT_ROUTING,
+    // Kept in sync with the two end markers: the backend SVG export reads it.
+    arrow: arrowFromMarkers(startMarker, endMarker),
+    startMarker,
+    endMarker,
+    markerSize: clampMarkerSize(partial.markerSize),
     lineStyle: partial.lineStyle || style.lineStyle || "solid",
+    // UML association ends, drawn at the corresponding connector ends.
+    sourceMultiplicity: partial.sourceMultiplicity ?? "",
+    targetMultiplicity: partial.targetMultiplicity ?? "",
+    relationshipType: partial.relationshipType ?? "",
     style,
     confidence: typeof partial.confidence === "number" ? partial.confidence : null,
     sources: Array.isArray(partial.sources) ? partial.sources : [],
   };
+}
+
+export function clampMarkerSize(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size)) return DEFAULT_MARKER_SIZE;
+  return Math.min(MAX_MARKER_SIZE, Math.max(MIN_MARKER_SIZE, Math.round(size)));
 }
 
 export function validateDiagram(data) {
